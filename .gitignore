@@ -1,0 +1,9 @@
+# Local Arduino build output
+build/
+*.bin
+*.elf
+*.map
+
+# Local secrets and editor state
+config.h
+.vscode/
