@@ -13,14 +13,15 @@ const allowedTypes = [
   "test",
 ];
 const typePattern = allowedTypes.join("|");
+const ticketPattern = "\\[(?:[A-Z][A-Z0-9]+-\\d+)\\]";
 const conventionalTitle = new RegExp(
-  `^(?:${typePattern})(?:\\([a-z0-9][a-z0-9._/-]*\\))?!?: [^\\s].+$`,
+  `^(?:${typePattern})(?:\\([a-z0-9][a-z0-9._/-]*\\))?!?: [^\\s].* ${ticketPattern}$`,
 );
 
 if (!conventionalTitle.test(title)) {
   throw new Error(
     `Invalid Conventional Commit title: "${title}"\n` +
-      `Expected: <type>(optional-scope): <description>\n` +
+      `Expected: <type>(optional-scope): <description> [ABC-123]\n` +
       `Allowed types: ${allowedTypes.join(", ")}`,
   );
 }
