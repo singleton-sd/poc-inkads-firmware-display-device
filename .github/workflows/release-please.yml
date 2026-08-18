@@ -54,6 +54,20 @@ jobs:
           RELEASE_TAG: ${{ steps.plan.outputs.next_tag }}
         run: node scripts/check-firmware-version.mjs "$RELEASE_TAG"
 
+      - uses: arduino/setup-arduino-cli@v2
+        if: steps.plan.outputs.release == 'true'
+
+      - name: Compile versioned firmware
+        if: steps.plan.outputs.release == 'true'
+        run: bash scripts/compile.sh
+
+      - name: Stage release assets
+        if: steps.plan.outputs.release == 'true'
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.plan.outputs.next_tag }}
+        run: bash scripts/stage-release-assets.sh
+
       - name: Commit, tag, and push
         if: steps.plan.outputs.release == 'true'
         env:
@@ -66,3 +80,10 @@ jobs:
           git tag "$NEXT_TAG"
           git push origin HEAD:main
           git push origin "$NEXT_TAG"
+
+      - name: Publish GitHub release
+        if: steps.plan.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.plan.outputs.next_tag }}
+        run: bash scripts/publish-github-release.sh
