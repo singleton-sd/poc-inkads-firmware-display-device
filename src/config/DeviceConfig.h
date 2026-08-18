@@ -16,5 +16,5 @@ constexpr char adminPasswordKey[] = "admin_pass";
 constexpr char setupApPrefix[] = "InkAds-Setup";
 constexpr size_t maxScanResults = 24;
 constexpr char deviceDnsZone[] = "devices.singletonsd.com";
-constexpr char firmwareVersion[] = "0.4.0";  // x-release-please-version
+constexpr char firmwareVersion[] = "0.5.0";  // x-release-please-version
 }  // namespace DeviceConfig

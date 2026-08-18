@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.5.0 - 2026-08-18
+[Full Changelog](https://github.com/singleton-sd/poc-inkads-firmware-display-device/compare/v0.4.0...v0.5.0)
+
+
+
+### Features
+
+- Scan nearby networks [POC-246] (#7) (09d7b85)
+
+
+### Maintenance
+
+- Stamp branch ticket onto pull request titles [POC-250] (#13) (3fc20ac)
+
 ## v0.4.0 - 2026-08-18
 
 
