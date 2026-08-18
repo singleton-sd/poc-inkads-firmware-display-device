@@ -6,6 +6,7 @@
 #include "../config/DeviceSettings.h"
 #include "../platform/DeviceIdentity.h"
 #include "../platform/DebugLog.h"
+#include "WifiScan.h"
 #include "../web/pages/ProvisioningPage.h"
 #include "../web/styles/DesignTokens.h"
 
@@ -18,7 +19,7 @@ ProvisioningPortal::ProvisioningPortal(ConfigStore& configStore)
 
 bool ProvisioningPortal::begin() {
   WiFi.disconnect(true, false);
-  WiFi.mode(WIFI_AP);
+  WiFi.mode(WIFI_AP_STA);
 
   accessPointName_ = buildAccessPointName();
   if (!WiFi.softAP(accessPointName_.c_str())) {
@@ -28,6 +29,7 @@ bool ProvisioningPortal::begin() {
   dnsServer_.start(dnsPort, "*", WiFi.softAPIP());
 
   webServer_.on("/", HTTP_GET, [this]() { showPortal(); });
+  webServer_.on("/networks", HTTP_GET, [this]() { showNetworks(); });
   webServer_.on("/save", HTTP_POST, [this]() { saveCredentials(); });
 
   // Common captive-portal probes used by Android, Apple, and Windows.
@@ -60,6 +62,8 @@ void ProvisioningPortal::showPortal() {
   page.replace("{{DESIGN_TOKENS}}", FPSTR(DESIGN_TOKENS_CSS));
   webServer_.send(200, "text/html", page);
 }
+
+void ProvisioningPortal::showNetworks() { WifiScan::sendJson(webServer_); }
 
 void ProvisioningPortal::saveCredentials() {
   DeviceSettings credentials;
