@@ -19,9 +19,5 @@ inline void credentials(const char* stage,
   Serial.println(credentials.password.isEmpty() ? "false" : "true");
   Serial.print("[config] wifi_password_length=");
   Serial.println(credentials.password.length());
-  Serial.print("[config] admin_password_present=");
-  Serial.println(credentials.adminPassword.isEmpty() ? "false" : "true");
-  Serial.print("[config] admin_password_length=");
-  Serial.println(credentials.adminPassword.length());
 }
 }  // namespace DebugLog

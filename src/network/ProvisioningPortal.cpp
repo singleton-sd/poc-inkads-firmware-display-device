@@ -65,7 +65,6 @@ void ProvisioningPortal::saveCredentials() {
   DeviceSettings credentials;
   credentials.ssid = webServer_.arg("ssid");
   credentials.password = webServer_.arg("password");
-  credentials.adminPassword = webServer_.arg("adminPassword");
   credentials.ssid.trim();
   DebugLog::credentials("received from provisioning form", credentials);
 

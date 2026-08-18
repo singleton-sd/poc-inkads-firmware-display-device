@@ -3,27 +3,43 @@
 #include <WebServer.h>
 #include <esp_http_server.h>
 
+#include "../auth/EntraAuthService.h"
 #include "../update/OtaUpdateService.h"
 
 class LocalWebServer {
  public:
-  void begin(const String& adminPassword);
+  void begin();
   void loop();
 
  private:
-  bool authenticate();
   void showHome();
-  void showAdmin();
   void refuseInsecureAdmin();
   bool startHttpsServer();
   static esp_err_t handleHttpsHome(httpd_req_t* request);
   static esp_err_t handleHttpsAdmin(httpd_req_t* request);
+  static esp_err_t handleHttpsSessionGet(httpd_req_t* request);
+  static esp_err_t handleHttpsSessionPost(httpd_req_t* request);
+  static esp_err_t handleHttpsSessionCancel(httpd_req_t* request);
+  static esp_err_t handleHttpsLogout(httpd_req_t* request);
   static esp_err_t handleHttpsUpdate(httpd_req_t* request);
   esp_err_t sendHttpsHome(httpd_req_t* request);
   esp_err_t sendHttpsAdmin(httpd_req_t* request);
+  esp_err_t sendHttpsSession(httpd_req_t* request);
+  esp_err_t startHttpsSession(httpd_req_t* request);
+  esp_err_t cancelHttpsSession(httpd_req_t* request);
+  esp_err_t logoutHttps(httpd_req_t* request);
+  esp_err_t updateHttps(httpd_req_t* request);
+  bool requireSession(httpd_req_t* request);
+  bool requireSessionCsrf(httpd_req_t* request);
+  bool requireLoginCsrf(httpd_req_t* request);
+  void drainBody(httpd_req_t* request);
+  esp_err_t sendText(httpd_req_t* request, const char* status, const char* type,
+                     const char* body);
+  bool registerGet(const char* uri, esp_err_t (*handler)(httpd_req_t*));
+  bool registerPost(const char* uri, esp_err_t (*handler)(httpd_req_t*));
 
   WebServer httpServer_{80};
   httpd_handle_t httpsServer_ = nullptr;
   OtaUpdateService otaUpdateService_;
-  String adminPassword_;
+  EntraAuthService entraAuth_;
 };
