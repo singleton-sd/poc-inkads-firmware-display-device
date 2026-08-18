@@ -59,7 +59,7 @@ const char HOME_PAGE[] PROGMEM = R"html(
     <article class="card"><small>Local address</small><strong>{{HOSTNAME}}.local</strong></article>
   </section>
   <nav class="actions" aria-label="Device actions">
-    <a class="button" href="/admin">Open administration</a>
+    <a class="button" href="{{ADMIN_URL}}">Open administration</a>
   </nav>
   <footer>InkAds · Locally hosted · Microsoft sign-in for administration requires internet access</footer>
 </main></body></html>

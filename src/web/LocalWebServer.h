@@ -4,6 +4,7 @@
 #include <esp_http_server.h>
 
 #include "../auth/EntraAuthService.h"
+#include "../config/TlsCertificateStore.h"
 #include "../update/OtaUpdateService.h"
 
 class LocalWebServer {
@@ -21,6 +22,7 @@ class LocalWebServer {
   static esp_err_t handleHttpsSessionPost(httpd_req_t* request);
   static esp_err_t handleHttpsSessionCancel(httpd_req_t* request);
   static esp_err_t handleHttpsLogout(httpd_req_t* request);
+  static esp_err_t handleHttpsTlsCertificate(httpd_req_t* request);
   static esp_err_t handleHttpsUpdate(httpd_req_t* request);
   esp_err_t sendHttpsHome(httpd_req_t* request);
   esp_err_t sendHttpsAdmin(httpd_req_t* request);
@@ -28,6 +30,7 @@ class LocalWebServer {
   esp_err_t startHttpsSession(httpd_req_t* request);
   esp_err_t cancelHttpsSession(httpd_req_t* request);
   esp_err_t logoutHttps(httpd_req_t* request);
+  esp_err_t updateTlsCertificate(httpd_req_t* request);
   esp_err_t updateHttps(httpd_req_t* request);
   bool requireSession(httpd_req_t* request);
   bool requireSessionCsrf(httpd_req_t* request);
@@ -42,4 +45,5 @@ class LocalWebServer {
   httpd_handle_t httpsServer_ = nullptr;
   OtaUpdateService otaUpdateService_;
   EntraAuthService entraAuth_;
+  TlsCertificateStore tlsStore_;
 };

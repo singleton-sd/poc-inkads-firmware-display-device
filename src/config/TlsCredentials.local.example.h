@@ -3,7 +3,7 @@
 // Copy this file to TlsCredentials.local.h and replace both values with the
 // certificate and private key issued uniquely for this device. The local file
 // is ignored by git. The certificate SAN must contain the device hostname,
-// for example DNS:inkads-a1b2c3.local.
+// for example DNS:inkads-a1b2c3.devices.singletonsd.com.
 namespace InkAdsTlsLocal {
 inline constexpr char certificatePem[] = R"pem(-----BEGIN CERTIFICATE-----
 REPLACE WITH THIS DEVICE'S PEM CERTIFICATE

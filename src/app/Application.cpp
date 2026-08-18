@@ -4,6 +4,7 @@
 
 #include "../config/DeviceConfig.h"
 #include "../network/TimeSync.h"
+#include "../platform/DeviceIdentity.h"
 
 void Application::begin() {
   Serial.begin(DeviceConfig::serialBaud);
@@ -11,6 +12,8 @@ void Application::begin() {
   Serial.println("Starting InkAds device...");
   Serial.print("Firmware version: ");
   Serial.println(DeviceConfig::firmwareVersion);
+  Serial.print("Device id: ");
+  Serial.println(DeviceIdentity::suffix());
 
   const DeviceSettings settings = configStore_.load();
   if (wifiConnection_.connect(settings)) {
