@@ -37,13 +37,16 @@ jobs:
         if: steps.plan.outputs.release == 'true'
         env:
           NEXT_TAG: ${{ steps.plan.outputs.next_tag }}
+          RANGE: ${{ steps.plan.outputs.range }}
         run: |
           docker run --rm \
             -v "$PWD:/app" \
             orhunp/git-cliff:2.13.1 \
             --config cliff.toml \
+            --offline \
             --tag "$NEXT_TAG" \
-            --prepend CHANGELOG.md
+            --prepend CHANGELOG.md \
+            "$RANGE"
 
       - name: Validate version consistency
         if: steps.plan.outputs.release == 'true'
