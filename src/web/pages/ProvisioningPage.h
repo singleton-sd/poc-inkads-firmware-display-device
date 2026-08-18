@@ -48,12 +48,8 @@ const char PROVISIONING_PAGE[] PROGMEM = R"html(
         <input name="password" type="password" maxlength="63"
                autocomplete="new-password">
       </label>
-      <label>
-        Admin password
-        <input name="adminPassword" type="password" minlength="8" maxlength="63"
-               autocomplete="new-password" required>
-      </label>
-      <small>This password protects the local admin and firmware update page.</small>
+      <small>After the device joins Wi-Fi, administration uses Microsoft Entra
+      sign-in. That step requires internet access.</small>
       <button type="submit">Save and connect</button>
       <small>The device will restart after saving.</small>
     </form>

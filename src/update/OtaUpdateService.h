@@ -5,10 +5,5 @@
 
 class OtaUpdateService {
  public:
-  bool authenticateHttps(httpd_req_t* request, const String& adminPassword);
-  esp_err_t handleHttpsUpdate(httpd_req_t* request,
-                              const String& adminPassword);
-
- private:
-  bool constantTimeEquals(const String& left, const String& right) const;
+  esp_err_t handleHttpsUpdate(httpd_req_t* request);
 };

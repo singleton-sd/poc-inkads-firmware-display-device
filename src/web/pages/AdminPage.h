@@ -29,6 +29,8 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
     var(--ssd-color-border-default);background:var(--ssd-color-background-default)}
     button{border:0;background:var(--ssd-color-background-brand);color:
     var(--ssd-color-text-on-brand);font-weight:var(--ssd-font-weight-bold);cursor:pointer}
+    button.secondary{background:var(--ssd-color-background-default);color:
+    var(--ssd-color-gray-900);border:1px solid var(--ssd-color-border-default)}
     progress{width:100%;accent-color:var(--ssd-color-background-brand)}
     #status{min-height:1.5em;color:var(--ssd-color-gray-700)}
     .warning{border-left:4px solid var(--ssd-color-feedback-danger-border);
@@ -39,28 +41,39 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
 </head>
 <body><main>
   <header><div class="eyebrow">Local device administration</div>
-    <h1>InkAds</h1><p>Manage this device without an internet connection.</p></header>
+    <h1>InkAds</h1>
+    <p>Signed in with Microsoft Entra. Firmware updates stay on the local device.</p></header>
   <section class="card">
     <div class="meta"><div><small>Firmware</small><strong>{{VERSION}}</strong></div>
       <div><small>Device address</small><strong>{{IP}}</strong></div></div>
     <h2>Firmware update</h2>
-    <p class="warning">Keep power connected until the device reboots.</p>
+    <p class="warning">Keep power connected until the device reboots. If this page
+    sat idle for more than 10 minutes, sign in again before uploading.</p>
     <form id="ota"><label>Compiled application binary (.bin)
       <input id="firmware" name="firmware" type="file" accept=".bin" required></label>
       <progress id="progress" max="100" value="0"></progress>
       <button type="submit">Install firmware</button><div id="status" role="status"></div>
     </form>
+    <button class="secondary" id="logout" type="button">Sign out</button>
   </section>
   <script>
+    const csrf='{{CSRF}}';
     const form=document.querySelector('#ota'),file=document.querySelector('#firmware'),
       progress=document.querySelector('#progress'),status=document.querySelector('#status');
     form.addEventListener('submit',event=>{event.preventDefault();const request=new XMLHttpRequest();
       request.open('POST','/admin/update');request.upload.onprogress=e=>{
         if(e.lengthComputable)progress.value=Math.round(e.loaded/e.total*100)};
-      request.onload=()=>{status.textContent=request.responseText};
+      request.onload=()=>{status.textContent=request.responseText;
+        if(request.status===401||request.status===403)location.reload();};
       request.onerror=()=>{status.textContent='Update failed. The device was not changed.'};
       request.setRequestHeader('Content-Type','application/octet-stream');
+      request.setRequestHeader('X-CSRF-Token',csrf);
       status.textContent='Uploading firmware...';request.send(file.files[0])});
+    document.querySelector('#logout').addEventListener('click',async()=>{
+      await fetch('/admin/logout',{method:'POST',credentials:'same-origin',
+        headers:{'X-CSRF-Token':csrf}});
+      location.reload();
+    });
   </script>
 </main></body></html>
 )html";

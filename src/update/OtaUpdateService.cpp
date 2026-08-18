@@ -1,45 +1,10 @@
 #include "OtaUpdateService.h"
 
 #include <Update.h>
-#include <mbedtls/base64.h>
 
 #include "../config/DeviceConfig.h"
 
-bool OtaUpdateService::authenticateHttps(httpd_req_t* request,
-                                         const String& adminPassword) {
-  const size_t headerLength =
-      httpd_req_get_hdr_value_len(request, "Authorization");
-  if (headerLength > 0 && headerLength < 256) {
-    char header[256];
-    if (httpd_req_get_hdr_value_str(request, "Authorization", header,
-                                    sizeof(header)) == ESP_OK) {
-      const String credentials = String(DeviceConfig::adminUsername) + ":" +
-                                 adminPassword;
-      unsigned char encoded[192];
-      size_t encodedLength = 0;
-      if (mbedtls_base64_encode(encoded, sizeof(encoded), &encodedLength,
-                                reinterpret_cast<const unsigned char*>(
-                                    credentials.c_str()),
-                                credentials.length()) == 0) {
-        const String expected =
-            "Basic " + String(reinterpret_cast<char*>(encoded), encodedLength);
-        if (constantTimeEquals(String(header), expected)) return true;
-      }
-    }
-  }
-
-  httpd_resp_set_status(request, "401 Unauthorized");
-  httpd_resp_set_hdr(request, "WWW-Authenticate",
-                     "Basic realm=\"InkAds administration\"");
-  httpd_resp_set_hdr(request, "Cache-Control", "no-store");
-  httpd_resp_send(request, "Authentication required", HTTPD_RESP_USE_STRLEN);
-  return false;
-}
-
-esp_err_t OtaUpdateService::handleHttpsUpdate(
-    httpd_req_t* request, const String& adminPassword) {
-  if (!authenticateHttps(request, adminPassword)) return ESP_OK;
-
+esp_err_t OtaUpdateService::handleHttpsUpdate(httpd_req_t* request) {
   char contentType[64] = {};
   if (httpd_req_get_hdr_value_str(request, "Content-Type", contentType,
                                   sizeof(contentType)) != ESP_OK ||
@@ -60,10 +25,10 @@ esp_err_t OtaUpdateService::handleHttpsUpdate(
   size_t remaining = request->content_len;
   while (remaining > 0) {
     const size_t wanted = min(remaining, sizeof(buffer));
-    const int received = httpd_req_recv(request, reinterpret_cast<char*>(buffer),
-                                        wanted);
-    if (received <= 0 || Update.write(buffer, received) !=
-                             static_cast<size_t>(received)) {
+    const int received =
+        httpd_req_recv(request, reinterpret_cast<char*>(buffer), wanted);
+    if (received <= 0 ||
+        Update.write(buffer, received) != static_cast<size_t>(received)) {
       Update.printError(Serial);
       Update.abort();
       httpd_resp_set_status(request, "500 Internal Server Error");
@@ -86,14 +51,4 @@ esp_err_t OtaUpdateService::handleHttpsUpdate(
   delay(DeviceConfig::restartDelayMs);
   ESP.restart();
   return ESP_OK;
-}
-
-bool OtaUpdateService::constantTimeEquals(const String& left,
-                                          const String& right) const {
-  if (left.length() != right.length()) return false;
-  uint8_t difference = 0;
-  for (size_t index = 0; index < left.length(); ++index) {
-    difference |= static_cast<uint8_t>(left[index] ^ right[index]);
-  }
-  return difference == 0;
 }

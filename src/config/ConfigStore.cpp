@@ -15,9 +15,20 @@ DeviceSettings ConfigStore::load() const {
 
   credentials.ssid = preferences.getString(DeviceConfig::ssidKey, "");
   credentials.password = preferences.getString(DeviceConfig::passwordKey, "");
-  credentials.adminPassword =
-      preferences.getString(DeviceConfig::adminPasswordKey, "");
+  const bool hasLegacyAdminPassword =
+      preferences.isKey(DeviceConfig::adminPasswordKey);
   preferences.end();
+
+  if (hasLegacyAdminPassword) {
+    if (preferences.begin(DeviceConfig::preferencesNamespace, false)) {
+      preferences.remove(DeviceConfig::adminPasswordKey);
+      preferences.end();
+      if (DeviceConfig::debugLogging) {
+        Serial.println("[config] removed legacy admin_pass");
+      }
+    }
+  }
+
   DebugLog::credentials("loaded from persistent memory", credentials);
   return credentials;
 }
@@ -25,11 +36,7 @@ DeviceSettings ConfigStore::load() const {
 bool ConfigStore::save(const DeviceSettings& credentials) const {
   if (!credentials.isConfigured() ||
       credentials.ssid.length() > DeviceConfig::maxSsidLength ||
-      credentials.password.length() > DeviceConfig::maxPasswordLength ||
-      credentials.adminPassword.length() <
-          DeviceConfig::minAdminPasswordLength ||
-      credentials.adminPassword.length() >
-          DeviceConfig::maxAdminPasswordLength) {
+      credentials.password.length() > DeviceConfig::maxPasswordLength) {
     return false;
   }
 
@@ -42,12 +49,11 @@ bool ConfigStore::save(const DeviceSettings& credentials) const {
       preferences.putString(DeviceConfig::ssidKey, credentials.ssid);
   const size_t passwordBytes =
       preferences.putString(DeviceConfig::passwordKey, credentials.password);
-  const size_t adminPasswordBytes = preferences.putString(
-      DeviceConfig::adminPasswordKey, credentials.adminPassword);
+  preferences.remove(DeviceConfig::adminPasswordKey);
   preferences.end();
 
   const bool passwordSaved = credentials.password.isEmpty() || passwordBytes > 0;
-  const bool saved = ssidBytes > 0 && passwordSaved && adminPasswordBytes > 0;
+  const bool saved = ssidBytes > 0 && passwordSaved;
   if (DeviceConfig::debugLogging) {
     Serial.print("[config] persistent save result=");
     Serial.println(saved ? "success" : "failure");

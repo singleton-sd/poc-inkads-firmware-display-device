@@ -13,7 +13,7 @@ class Application {
   void loop();
 
  private:
-  void startNormalMode(const DeviceSettings& settings);
+  void startNormalMode();
   void startProvisioningMode();
 
   ConfigStore configStore_;

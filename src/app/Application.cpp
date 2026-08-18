@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "../config/DeviceConfig.h"
+#include "../network/TimeSync.h"
 
 void Application::begin() {
   Serial.begin(DeviceConfig::serialBaud);
@@ -13,7 +14,7 @@ void Application::begin() {
 
   const DeviceSettings settings = configStore_.load();
   if (wifiConnection_.connect(settings)) {
-    startNormalMode(settings);
+    startNormalMode();
   } else {
     startProvisioningMode();
   }
@@ -28,10 +29,11 @@ void Application::loop() {
   delay(2);
 }
 
-void Application::startNormalMode(const DeviceSettings& settings) {
+void Application::startNormalMode() {
   deviceMode_ = DeviceMode::Normal;
+  TimeSync::begin();
   mdnsService_.begin();
-  localWebServer_.begin(settings.adminPassword);
+  localWebServer_.begin();
   Serial.println("Normal InkAds mode started.");
 }
 
