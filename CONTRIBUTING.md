@@ -57,9 +57,12 @@ After that:
 - `prepare-commit-msg` appends the branch ticket to valid Conventional Commit
   subjects on `feature/...` and `hotfix/...` branches
 - `commit-msg` validates the final subject and blocks ticket mismatches
-- CI runs the same `scripts/check-conventional-title.sh` checker against the
-  pull-request title and branch name, because GitHub cannot use your local
-  `prepare-commit-msg` hook on squash merge
+- CI stamps `[POC-123]` onto a pull-request title when the branch is
+  `feature/POC-123-...` or `hotfix/POC-123-...` and the title has no ticket
+  suffix. `gh pr create --title` bypasses local hooks, so this is what keeps
+  squash-merge titles valid. CI then runs
+  `scripts/check-conventional-title.sh` against the final title. It does not
+  overwrite a different ticket that is already present.
 
 ## Release process
 
