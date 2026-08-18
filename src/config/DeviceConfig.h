@@ -17,5 +17,5 @@ constexpr char passwordKey[] = "wifi_pass";
 constexpr char adminPasswordKey[] = "admin_pass";
 constexpr char setupApPrefix[] = "InkAds-Setup";
 constexpr char adminUsername[] = "admin";
-constexpr char firmwareVersion[] = "0.2.0";
+constexpr char firmwareVersion[] = "0.2.0";  // x-release-please-version
 }  // namespace DeviceConfig

@@ -1,5 +1,7 @@
 # Local Arduino build output
 build/
+dist/
+src/config/TlsCredentials.local.h
 *.bin
 *.elf
 *.map

@@ -40,7 +40,7 @@ when configuration is loaded from persistent memory at boot.
 
 ## Arduino IDE
 
-Open `InkAdsDevice.ino`, select `MH ET LIVE ESP32MiniKit` (or `ESP32 Dev
+Open `display-device.ino`, select `MH ET LIVE ESP32MiniKit` (or `ESP32 Dev
 Module`), select an OTA-capable partition scheme, and upload.
 
 No third-party libraries are required. `Preferences`, `DNSServer`, `WebServer`,

@@ -54,13 +54,13 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
   <script>
     const form=document.querySelector('#ota'),file=document.querySelector('#firmware'),
       progress=document.querySelector('#progress'),status=document.querySelector('#status');
-    form.addEventListener('submit',event=>{event.preventDefault();const data=new FormData();
-      data.append('firmware',file.files[0]);const request=new XMLHttpRequest();
+    form.addEventListener('submit',event=>{event.preventDefault();const request=new XMLHttpRequest();
       request.open('POST','/admin/update');request.upload.onprogress=e=>{
         if(e.lengthComputable)progress.value=Math.round(e.loaded/e.total*100)};
       request.onload=()=>{status.textContent=request.responseText};
       request.onerror=()=>{status.textContent='Update failed. The device was not changed.'};
-      status.textContent='Uploading firmware...';request.send(data)});
+      request.setRequestHeader('Content-Type','application/octet-stream');
+      status.textContent='Uploading firmware...';request.send(file.files[0])});
   </script>
 </main></body></html>
 )html";
