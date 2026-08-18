@@ -85,6 +85,16 @@ authorization.
 
 On boot, any leftover NVS `admin_pass` value from earlier firmware is deleted.
 
+## Releases
+
+Release automation runs on merges to `main` and does not open version-bump PRs.
+
+- Conventional Commits drive semantic versioning (`feat` -> minor, `fix/perf/refactor/revert` -> patch, breaking change -> major).
+- The release workflow updates `version.json` and `src/config/DeviceConfig.h`, prepends `CHANGELOG.md` using `git-cliff`, creates a release commit, and tags it as `vX.Y.Z`.
+- Pushing the release tag triggers `.github/workflows/firmware-release.yml`, which builds binaries and publishes the GitHub release assets.
+
+To keep release behavior predictable, use Conventional Commit titles for squash-merge commits, including a ticket reference as described in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Arduino IDE
 
 Open `display-device.ino`, select `MH ET LIVE ESP32MiniKit` (or `ESP32 Dev
