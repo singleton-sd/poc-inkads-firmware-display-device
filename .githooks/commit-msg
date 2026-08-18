@@ -1,7 +1,6 @@
 #!/bin/sh
 
 commit_msg_file="$1"
-allowed_types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
 
 if [ -z "$commit_msg_file" ] || [ ! -f "$commit_msg_file" ]; then
   echo "commit-msg hook requires the commit message file path." >&2
@@ -9,47 +8,6 @@ if [ -z "$commit_msg_file" ] || [ ! -f "$commit_msg_file" ]; then
 fi
 
 first_line=$(sed -n '1p' "$commit_msg_file" | tr -d '\r')
-branch_name=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
-branch_ticket=$(printf '%s\n' "$branch_name" | sed -nE 's#^(feature|hotfix)/([A-Z][A-Z0-9]+-[0-9]+)(-.+)?$#\2#p')
-message_ticket=$(printf '%s\n' "$first_line" | sed -nE 's#^.*\[([A-Z][A-Z0-9]+-[0-9]+)\]$#\1#p')
+repo_root=$(git rev-parse --show-toplevel)
 
-pattern="^(${allowed_types})(\\([a-z0-9][a-z0-9._/-]*\\))?!?: .+ \\[[A-Z][A-Z0-9]+-[0-9]+\\]$"
-
-if [ -n "$branch_ticket" ] && [ -n "$message_ticket" ] && [ "$branch_ticket" != "$message_ticket" ]; then
-  cat >&2 <<EOF
-Commit ticket does not match the current branch.
-
-Branch:
-  $branch_name
-
-Expected ticket:
-  $branch_ticket
-
-Found in commit message:
-  $message_ticket
-EOF
-  exit 1
-fi
-
-if printf '%s\n' "$first_line" | grep -Eq "$pattern"; then
-  exit 0
-fi
-
-cat >&2 <<'EOF'
-Invalid commit message.
-
-Expected format:
-  <type>(optional-scope): <description> [ABC-123]
-
-If you are on a `feature/ABC-123-...` or `hotfix/ABC-123-...` branch, the
-local `prepare-commit-msg` hook appends the ticket automatically.
-
-Examples:
-  feat(ota): check the stable channel for updates [POC-247]
-  fix(wifi): recover after disconnect [POC-247]
-
-Allowed types:
-  build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test
-EOF
-
-exit 1
+exec "$repo_root/scripts/check-conventional-title.sh" "$first_line"

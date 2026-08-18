@@ -15,6 +15,6 @@ jobs:
 
       - name: Validate squash-merge commit title
         env:
+          GIT_BRANCH: ${{ github.head_ref }}
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: node scripts/check-conventional-title.mjs "$PR_TITLE"
-
+        run: sh scripts/check-conventional-title.sh "$PR_TITLE"

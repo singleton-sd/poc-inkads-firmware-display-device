@@ -55,8 +55,9 @@ After that:
 - `prepare-commit-msg` appends the branch ticket to valid Conventional Commit
   subjects on `feature/...` and `hotfix/...` branches
 - `commit-msg` validates the final subject and blocks ticket mismatches
-- CI still validates pull-request titles, which must include the ticket
-  explicitly because GitHub cannot infer it from your local branch name
+- CI runs the same `scripts/check-conventional-title.sh` checker against the
+  pull-request title and branch name, because GitHub cannot use your local
+  `prepare-commit-msg` hook on squash merge
 
 ## Release process
 
