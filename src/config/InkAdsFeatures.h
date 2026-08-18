@@ -1,0 +1,29 @@
+#pragma once
+
+#ifndef INKADS_TARGET_ID
+#define INKADS_TARGET_ID mhetesp32minikit-full
+#endif
+
+#ifndef INKADS_FEATURE_WIFI
+#define INKADS_FEATURE_WIFI 1
+#endif
+
+#ifndef INKADS_FEATURE_PROVISIONING
+#define INKADS_FEATURE_PROVISIONING 1
+#endif
+
+#ifndef INKADS_FEATURE_HTTPS_ADMIN
+#define INKADS_FEATURE_HTTPS_ADMIN 1
+#endif
+
+#ifndef INKADS_FEATURE_ENTRA
+#define INKADS_FEATURE_ENTRA 1
+#endif
+
+#ifndef INKADS_FEATURE_OTA
+#define INKADS_FEATURE_OTA 1
+#endif
+
+#ifndef INKADS_FEATURE_EPAPER
+#define INKADS_FEATURE_EPAPER 0
+#endif

@@ -146,14 +146,16 @@ Release automation runs on merges to `main` and does not open version-bump PRs.
 
 - Conventional Commits drive semantic versioning (`feat` -> minor, `fix/perf/refactor/revert` -> patch, breaking change -> major).
 - The release workflow updates `version.json` and `src/config/DeviceConfig.h`, prepends `CHANGELOG.md` using `git-cliff`, creates a release commit, and tags it as `vX.Y.Z`.
-- Pushing the release tag triggers `.github/workflows/firmware-release.yml`, which builds binaries and publishes the GitHub release assets.
+- Pushing the release tag triggers `.github/workflows/firmware-release.yml`, which compiles every `targets.json` row and publishes `inkads-{filename}-{suffix}-v{version}.bin` plus `inkads-manifest.json`.
 
 To keep release behavior predictable, use Conventional Commit titles for squash-merge commits, including a ticket reference as described in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Arduino IDE
 
 Open `display-device.ino`, select `MH ET LIVE ESP32MiniKit` (or `ESP32 Dev
-Module`), select an OTA-capable partition scheme, and upload.
+Module`), select an OTA-capable partition scheme, and upload. Local IDE
+builds use the committed defaults in `src/config/InkAdsFeatures.h`. CI
+overwrites that header per `targets.json` row before `arduino-cli compile`.
 
 For first-time bootstrap only, copy `src/config/TlsCredentials.local.example.h`
 to `src/config/TlsCredentials.local.h` and provision a device certificate whose

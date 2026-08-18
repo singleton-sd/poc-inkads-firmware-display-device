@@ -1,3 +1,7 @@
+#include "../config/InkAdsFeatures.h"
+
+#if INKADS_FEATURE_ENTRA
+
 #include "DeviceCodeFlow.h"
 
 #include <cstring>
@@ -254,3 +258,5 @@ void DeviceCodeFlow::clearSensitive() {
   lastPollMs_ = 0;
   expiresAtMs_ = 0;
 }
+
+#endif

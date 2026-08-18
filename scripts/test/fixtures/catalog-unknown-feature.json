@@ -1,0 +1,19 @@
+{
+  "features": ["wifi"],
+  "boards": [
+    {
+      "id": "mhetesp32minikit",
+      "displayName": "MH-ET LIVE ESP32 MiniKit",
+      "fqbn": "esp32:esp32:mhetesp32minikit",
+      "filename": "mhetesp32minikit"
+    }
+  ],
+  "targets": [
+    {
+      "board": "mhetesp32minikit",
+      "partitionScheme": "default",
+      "features": ["wifi", "not-a-feature"],
+      "suffix": "full"
+    }
+  ]
+}

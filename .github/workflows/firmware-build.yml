@@ -10,8 +10,34 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  catalog:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run catalog tests
+        run: bash scripts/test/run.sh
+
+      - name: Validate firmware version
+        run: node scripts/check-firmware-version.mjs
+
+      - name: Export target matrix
+        id: matrix
+        run: |
+          {
+            echo 'matrix<<EOF'
+            bash scripts/lib/targets-catalog.sh matrix
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: catalog
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.catalog.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,28 +51,14 @@ jobs:
           arduino-cli core update-index
           arduino-cli core install esp32:esp32@3.3.11
 
-      - name: Validate firmware version
-        run: node scripts/check-firmware-version.mjs
-
-      - name: Compile firmware
-        run: |
-          # Arduino CLI requires the folder name to match display-device.ino.
-          # GitHub Actions checks out into a folder named after the repository.
-          sketch_dir="${RUNNER_TEMP}/display-device"
-          mkdir -p "$sketch_dir" dist
-          rsync -a --exclude '.git' --exclude dist ./ "$sketch_dir/"
-          arduino-cli compile \
-            --fqbn esp32:esp32:mhetesp32minikit \
-            --output-dir "${GITHUB_WORKSPACE}/dist" \
-            "$sketch_dir"
+      - name: Compile ${{ matrix.id }}
+        run: bash scripts/compile.sh --target "${{ matrix.id }}"
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: inkads-firmware
+          name: ${{ matrix.artifactStem }}
           path: |
-            dist/display-device.ino.bin
-            dist/display-device.ino.merged.bin
-            dist/display-device.ino.bootloader.bin
-            dist/display-device.ino.partitions.bin
+            dist/${{ matrix.artifactStem }}.bin
+            dist/${{ matrix.artifactStem }}-factory.bin
           if-no-files-found: error

@@ -1,3 +1,7 @@
+#include "../config/InkAdsFeatures.h"
+
+#if INKADS_FEATURE_ENTRA
+
 #include "EntraHttpsClient.h"
 
 #include <cstring>
@@ -80,3 +84,5 @@ bool EntraHttpsClient::perform(const char* url, const char* form, char* body,
   if (bodyLength != nullptr) *bodyLength = capture.length;
   return result == ESP_OK && !capture.overflowed && capture.length > 0;
 }
+
+#endif

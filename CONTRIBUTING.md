@@ -77,8 +77,19 @@ After that:
    `perf` / `refactor` / `revert` are patch bumps, and a breaking change is
    a major bump.
 4. Pushing the tag triggers the firmware release workflow, which validates
-   the version, builds both images, generates the OTA manifest, and
-   publishes the GitHub Release assets.
+   the version, compiles every row in `targets.json`, writes versioned
+   `inkads-{filename}-{suffix}-v{version}.bin` assets plus
+   `inkads-manifest.json`, and publishes the GitHub Release.
 
 `version.json` is the canonical firmware version. The C++ constant is
 a generated release companion that is validated against it on every build.
+Artifact names also take that version. Add another `targets.json` row to
+compile a second board or a size-reduced feature cut of the same board.
+
+Catalog tests:
+
+```sh
+bash scripts/test/run.sh
+```
+
+`jq` is required for the catalog scripts.

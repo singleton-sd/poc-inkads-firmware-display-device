@@ -5,6 +5,7 @@
 
 ## Test plan
 
+- [ ] `bash scripts/test/run.sh` succeeds
 - [ ] `bash scripts/compile.sh` succeeds
 - [ ]
 

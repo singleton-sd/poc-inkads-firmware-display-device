@@ -1,3 +1,7 @@
+#include "../config/InkAdsFeatures.h"
+
+#if INKADS_FEATURE_ENTRA
+
 #include "IdTokenValidator.h"
 
 #include <cstring>
@@ -321,3 +325,5 @@ bool IdTokenValidator::claimsMatch(const char* payloadJson,
   return issuerOk && tenantOk && expiryOk && notBeforeOk &&
          audienceMatches(payloadJson, audience);
 }
+
+#endif

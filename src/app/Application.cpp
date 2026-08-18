@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "../config/DeviceConfig.h"
+#include "../config/InkAdsFeatures.h"
 #include "../network/TimeSync.h"
 #include "../platform/DeviceIdentity.h"
 
@@ -12,6 +13,8 @@ void Application::begin() {
   Serial.println("Starting InkAds device...");
   Serial.print("Firmware version: ");
   Serial.println(DeviceConfig::firmwareVersion);
+  Serial.print("Firmware target: ");
+  Serial.println(INKADS_TARGET_ID);
   Serial.print("Device id: ");
   Serial.println(DeviceIdentity::suffix());
 

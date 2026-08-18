@@ -1,3 +1,7 @@
+#include "../config/InkAdsFeatures.h"
+
+#if INKADS_FEATURE_HTTPS_ADMIN
+
 #include "TlsCertificateStore.h"
 
 #include <SPIFFS.h>
@@ -176,3 +180,5 @@ bool TlsCertificateStore::certificateMentionsHost(
     const String& subjectName, const String& expectedHostname) const {
   return subjectName.indexOf(expectedHostname) >= 0;
 }
+
+#endif

@@ -1,3 +1,7 @@
+#include "../config/InkAdsFeatures.h"
+
+#if INKADS_FEATURE_OTA
+
 #include "OtaUpdateService.h"
 
 #include <Update.h>
@@ -52,3 +56,5 @@ esp_err_t OtaUpdateService::handleHttpsUpdate(httpd_req_t* request) {
   ESP.restart();
   return ESP_OK;
 }
+
+#endif

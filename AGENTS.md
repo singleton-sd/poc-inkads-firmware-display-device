@@ -67,7 +67,8 @@ Toolchain (same as CI):
 
 - Board manager URL: `https://espressif.github.io/arduino-esp32/package_esp32_index.json`
 - Core: `esp32:esp32@3.3.11`
-- FQBN: `esp32:esp32:mhetesp32minikit`
+- FQBNs and feature cuts: `targets.json` (compile with
+  `bash scripts/compile.sh`, or `--target <id>`)
 
 No third-party Arduino libraries. Do not commit `dist/`, `build/`, or
 `src/config/TlsCredentials.local.h`. Upload is optional and port-specific;
