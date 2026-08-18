@@ -39,9 +39,8 @@ jobs:
           NEXT_TAG: ${{ steps.plan.outputs.next_tag }}
         run: |
           docker run --rm \
-            -v "$PWD:/repo" \
-            -w /repo \
-            ghcr.io/orhun/git-cliff:latest \
+            -v "$PWD:/app" \
+            orhunp/git-cliff:2.13.1 \
             --config cliff.toml \
             --tag "$NEXT_TAG" \
             --prepend CHANGELOG.md
