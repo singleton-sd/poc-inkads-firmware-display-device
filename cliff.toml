@@ -1,0 +1,57 @@
+[changelog]
+header = "# Changelog\n\n"
+body = """
+{% if version -%}
+## {{ version }} - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+## Unreleased
+{% endif -%}
+
+{% if previous.version -%}
+[Full Changelog](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/compare/{{ previous.version }}...{{ version }})
+{% endif %}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+{% for commit in commits %}
+- {{ commit.message | upper_first }} ({{ commit.id | truncate(length=7, end="") }})
+{% endfor %}
+{% endfor %}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+tag_pattern = "v[0-9]*"
+sort_commits = "oldest"
+
+[remote.github]
+owner = "singleton-sd"
+repo = "poc-inkads-firmware-display-device"
+
+[[git.commit_parsers]]
+message = "^feat"
+group = "<!-- 0 -->Features"
+
+[[git.commit_parsers]]
+message = "^fix"
+group = "<!-- 1 -->Bug Fixes"
+
+[[git.commit_parsers]]
+message = "^perf"
+group = "<!-- 2 -->Performance"
+
+[[git.commit_parsers]]
+message = "^refactor"
+group = "<!-- 3 -->Refactoring"
+
+[[git.commit_parsers]]
+message = "^docs"
+group = "<!-- 4 -->Documentation"
+
+[[git.commit_parsers]]
+message = "^chore|^ci|^build|^test"
+group = "<!-- 5 -->Maintenance"

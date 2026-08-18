@@ -1,21 +1,66 @@
-name: Release PR
+name: Main merge release
 
 on:
   push:
-    branches: [master, main]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
-  issues: write
-  pull-requests: write
+
+concurrency:
+  group: main-release
+  cancel-in-progress: false
 
 jobs:
-  release-pr:
+  release:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: actions/checkout@v4
         with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-          skip-github-release: true
+          fetch-depth: 0
+
+      - name: Compute next release
+        id: plan
+        run: bash scripts/release_plan.sh
+
+      - name: Stop when no release is needed
+        if: steps.plan.outputs.release != 'true'
+        run: echo "No releasable conventional commits found since ${{ steps.plan.outputs.base_tag }}."
+
+      - name: Apply release version files
+        if: steps.plan.outputs.release == 'true'
+        run: bash scripts/release_plan.sh --apply-version
+
+      - name: Build changelog with git-cliff
+        if: steps.plan.outputs.release == 'true'
+        env:
+          NEXT_TAG: ${{ steps.plan.outputs.next_tag }}
+        run: |
+          docker run --rm \
+            -v "$PWD:/repo" \
+            -w /repo \
+            ghcr.io/orhun/git-cliff:latest \
+            --config cliff.toml \
+            --tag "$NEXT_TAG" \
+            --prepend CHANGELOG.md
+
+      - name: Validate version consistency
+        if: steps.plan.outputs.release == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.plan.outputs.next_tag }}
+        run: node scripts/check-firmware-version.mjs "$RELEASE_TAG"
+
+      - name: Commit, tag, and push
+        if: steps.plan.outputs.release == 'true'
+        env:
+          NEXT_TAG: ${{ steps.plan.outputs.next_tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md version.json src/config/DeviceConfig.h
+          git commit -m "chore(release): ${NEXT_TAG} [skip ci]"
+          git tag "$NEXT_TAG"
+          git push origin HEAD:main
+          git push origin "$NEXT_TAG"

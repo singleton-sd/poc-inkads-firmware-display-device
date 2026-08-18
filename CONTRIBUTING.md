@@ -4,7 +4,7 @@
 
 Use a Conventional Commit title for every pull request and include a ticket
 reference at the end. This repository uses squash merging, so the pull-request
-title becomes the commit that Release Please evaluates.
+title becomes the commit that the main-merge release job evaluates.
 
 ```text
 <type>(optional-scope): <description> [ABC-123]
@@ -15,8 +15,9 @@ Common types:
 - `feat`: user-visible functionality; normally a minor version bump.
 - `fix`: a bug fix; normally a patch version bump.
 - `perf`: a user-visible performance improvement; normally a patch bump.
-- `docs`, `test`, `refactor`, `build`, `ci`, `chore`: maintenance changes that
-  do not normally trigger a release by themselves.
+- `refactor` and `revert`: normally a patch bump.
+- `docs`, `test`, `build`, `ci`, `chore`: maintenance changes that do not
+  trigger a release by themselves.
 
 Examples:
 
@@ -34,8 +35,9 @@ feat(manifest)!: require schema version 2 [POC-247]
 ```
 
 The pull-request title check enforces the shape, accepted types, and required
-ticket reference. Release Please uses the merged Conventional Commits to
-prepare release notes and choose the next semantic version.
+ticket reference. After merge to `main`, `scripts/release_plan.sh` uses those
+commits to choose the next semantic version, and `git-cliff` writes changelog
+notes.
 
 For local commits, the repo-managed hooks derive the ticket from a matching
 branch name such as `feature/POC-247-conventional-commit-hooks` and append it
@@ -61,12 +63,19 @@ After that:
 
 ## Release process
 
-1. Merge Conventional Commits into the default branch.
-2. Review and merge the Release Please pull request. It updates
-   `version.json`, `DeviceConfig.h`, and `CHANGELOG.md` together.
-3. Create and push the matching tag, for example `v0.3.0`.
-4. The firmware release workflow validates the tag, builds both images,
-   generates the OTA manifest, and publishes the GitHub Release assets.
+1. Merge Conventional Commits into `main`. Do not open a version-bump PR.
+2. The main-merge release workflow runs `scripts/release_plan.sh`. If there
+   are releasable commits since the last tag (or since the last
+   `version.json` change when no tags exist), it updates `version.json` and
+   `DeviceConfig.h`, prepends `CHANGELOG.md` with `git-cliff`, and pushes a
+   `vX.Y.Z` tag.
+3. Maintenance commits (`docs`, `test`, `build`, `ci`, `chore`) do not
+   create a release by themselves. `feat` is a minor bump, `fix` /
+   `perf` / `refactor` / `revert` are patch bumps, and a breaking change is
+   a major bump.
+4. Pushing the tag triggers the firmware release workflow, which validates
+   the version, builds both images, generates the OTA manifest, and
+   publishes the GitHub Release assets.
 
 `version.json` is the canonical firmware version. The C++ constant is
 a generated release companion that is validated against it on every build.
