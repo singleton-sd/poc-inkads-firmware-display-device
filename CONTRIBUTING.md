@@ -2,12 +2,12 @@
 
 ## Conventional Commits
 
-Use a Conventional Commit title for every pull request. This repository uses
-squash merging, so the pull-request title becomes the commit that Release
-Please evaluates.
+Use a Conventional Commit title for every pull request and include a ticket
+reference at the end. This repository uses squash merging, so the pull-request
+title becomes the commit that Release Please evaluates.
 
 ```text
-<type>(optional-scope): <description>
+<type>(optional-scope): <description> [ABC-123]
 ```
 
 Common types:
@@ -21,21 +21,43 @@ Common types:
 Examples:
 
 ```text
-feat(ota): check the stable channel for firmware updates
-fix(wifi): recover after an access point disconnects
-docs: describe initial device provisioning
+feat(ota): check the stable channel for firmware updates [POC-247]
+fix(wifi): recover after an access point disconnects [POC-247]
+docs: describe initial device provisioning [POC-247]
 ```
 
 Use `!` and a `BREAKING CHANGE:` footer when compatibility is intentionally
 broken:
 
 ```text
-feat(manifest)!: require schema version 2
+feat(manifest)!: require schema version 2 [POC-247]
 ```
 
-The pull-request title check enforces the shape and accepted types. Release
-Please uses the merged Conventional Commits to prepare release notes and choose
-the next semantic version.
+The pull-request title check enforces the shape, accepted types, and required
+ticket reference. Release Please uses the merged Conventional Commits to
+prepare release notes and choose the next semantic version.
+
+For local commits, the repo-managed hooks derive the ticket from a matching
+branch name such as `feature/POC-247-conventional-commit-hooks` and append it
+to the commit subject automatically. If you type a different ticket manually,
+the commit is rejected.
+
+## Local hook setup
+
+Install the repo-managed Git hooks once per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+After that:
+
+- `prepare-commit-msg` appends the branch ticket to valid Conventional Commit
+  subjects on `feature/...` and `hotfix/...` branches
+- `commit-msg` validates the final subject and blocks ticket mismatches
+- CI runs the same `scripts/check-conventional-title.sh` checker against the
+  pull-request title and branch name, because GitHub cannot use your local
+  `prepare-commit-msg` hook on squash merge
 
 ## Release process
 

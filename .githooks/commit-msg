@@ -1,0 +1,13 @@
+#!/bin/sh
+
+commit_msg_file="$1"
+
+if [ -z "$commit_msg_file" ] || [ ! -f "$commit_msg_file" ]; then
+  echo "commit-msg hook requires the commit message file path." >&2
+  exit 1
+fi
+
+first_line=$(sed -n '1p' "$commit_msg_file" | tr -d '\r')
+repo_root=$(git rev-parse --show-toplevel)
+
+exec "$repo_root/scripts/check-conventional-title.sh" "$first_line"
