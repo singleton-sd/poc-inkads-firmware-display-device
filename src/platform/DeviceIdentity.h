@@ -17,6 +17,12 @@ inline String hostname() { return String("inkads-") + suffix(); }
 
 inline String localUrl() { return String("http://") + hostname() + ".local/"; }
 
+inline String dnsName() {
+  return hostname() + "." + String(DeviceConfig::deviceDnsZone);
+}
+
+inline String httpsAdminUrl() { return String("https://") + dnsName() + "/admin"; }
+
 inline String setupAccessPointName() {
   String name = DeviceConfig::setupApPrefix;
   name += "-";

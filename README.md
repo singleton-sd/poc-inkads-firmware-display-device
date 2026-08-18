@@ -21,9 +21,11 @@ redirects to the stable device-derived mDNS address
 the configured network. The suffix is derived from the device identity, so it
 remains stable across reboots and avoids collisions between InkAds devices.
 
-Administration is served only over HTTPS at `/admin`. Sign-in uses Microsoft
-Entra Device Code Flow. The device talks to the tenant authority directly; it
-does not host a password and does not use a client secret.
+Administration is served only over HTTPS at `/admin`. The trusted URL is
+`https://inkads-xxxxxx.devices.singletonsd.com/admin`, where `xxxxxx` is the
+device suffix from `ESP.getEfuseMac()`. Sign-in uses Microsoft Entra Device
+Code Flow. The device talks to the tenant authority directly; it does not host
+a password and does not use a client secret.
 
 All HTML, JavaScript, CSS, and the required Singleton SD design tokens are
 compiled into the firmware. The device does not request internet-hosted assets.
@@ -63,14 +65,63 @@ Create or verify a single-tenant app registration:
 6. Apply Conditional Access and MFA where licensing permits.
 7. Use the tenant-specific authority, never `/common`.
 
+## TLS certificate storage and rotation
+
+TLS certificate/key material is stored in writable flash (SPIFFS), not in the
+application binary:
+
+- active certificate: `/tls_active_cert.pem`
+- active key: `/tls_active_key.pem`
+- staged certificate: `/tls_staged_cert.pem`
+- staged key: `/tls_staged_key.pem`
+
+At boot, HTTPS starts only if a valid active bundle is present. If no flash
+bundle exists, the firmware attempts one-time bootstrap from
+`src/config/TlsCredentials.local.h` (for development provisioning), validates
+it, then writes it to flash.
+
+### Admin-page certificate rotation (phase 1)
+
+1. Sign in to `https://inkads-xxxxxx.devices.singletonsd.com/admin`.
+2. Upload renewed certificate PEM + private key PEM in the **TLS certificate
+   rotation** form.
+3. The device validates parseability, key/cert pairing, expiry, and hostname
+   match against `inkads-xxxxxx.devices.singletonsd.com`.
+4. On success, staged files are promoted to active and used on next HTTPS
+   restart.
+
+If validation fails, the current active certificate remains unchanged.
+
+### Operator scripts
+
+Use Node scripts under `scripts/device-tls`:
+
+- `publish-device-dns.mjs` (Route 53 A record upsert)
+- `issue-device-cert.mjs` (Let's Encrypt DNS-01 issuance)
+- `upload-device-cert.mjs` (authenticated upload to `/admin/tls-certificate`)
+
+Environment variables:
+
+- `HOSTED_ZONE_ID`, `DEVICE_HOSTNAME`, `DEVICE_IP` for DNS publish
+- `ACME_EMAIL`, `HOSTED_ZONE_ID`, `DEVICE_HOSTNAME` for cert issuance
+- `DEVICE_BASE_URL`, `SESSION_COOKIE`, `CSRF_TOKEN` for upload
+
+### Server-pull follow-up (phase 2)
+
+Automated device pull from a trusted service is tracked separately in
+[POC-249 follow-up](https://app.clickup.com/t/86d42hdwk). It is not implemented
+in this firmware change.
+
 ### Physical recovery
 
 There is no remote password bypass. If Entra IDs, TLS certificates, or Wi-Fi
 settings are wrong:
 
-1. Connect USB and flash corrected firmware (`EntraConfig.h` and
-   `TlsCredentials.local.h`).
-2. To clear Wi-Fi settings during development, call `configStore.clear()` from
+1. Connect USB and flash corrected firmware if Entra config is wrong.
+2. If TLS material in flash is invalid/expired and remote rotation cannot be
+   completed, re-provision via admin upload after bootstrapping a temporary
+   local cert (`TlsCredentials.local.h`) if needed.
+3. To clear Wi-Fi settings during development, call `configStore.clear()` from
    a temporary path, upload once, then remove that call.
 
 A dedicated physical factory-reset control is still a follow-up task.
@@ -90,9 +141,9 @@ On boot, any leftover NVS `admin_pass` value from earlier firmware is deleted.
 Open `display-device.ino`, select `MH ET LIVE ESP32MiniKit` (or `ESP32 Dev
 Module`), select an OTA-capable partition scheme, and upload.
 
-Copy `src/config/TlsCredentials.local.example.h` to
-`src/config/TlsCredentials.local.h` and provision a device certificate whose
-SAN matches `inkads-xxxxxx.local`.
+For first-time bootstrap only, copy `src/config/TlsCredentials.local.example.h`
+to `src/config/TlsCredentials.local.h` and provision a device certificate whose
+subject contains `inkads-xxxxxx.devices.singletonsd.com`.
 
 No third-party libraries are required. `Preferences`, `DNSServer`, `WebServer`,
 `WiFi`, ESP-IDF HTTPS, `cJSON`, and `mbedtls` are supplied by the Espressif

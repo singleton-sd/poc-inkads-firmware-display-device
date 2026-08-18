@@ -25,6 +25,8 @@ void LocalWebServer::begin() {
                  [this]() { refuseInsecureAdmin(); });
   httpServer_.on("/admin/logout", HTTP_POST,
                  [this]() { refuseInsecureAdmin(); });
+  httpServer_.on("/admin/tls-certificate", HTTP_POST,
+                 [this]() { refuseInsecureAdmin(); });
   httpServer_.on("/admin/update", HTTP_POST,
                  [this]() { refuseInsecureAdmin(); });
   httpServer_.onNotFound(
@@ -35,8 +37,7 @@ void LocalWebServer::begin() {
   Serial.println(WiFi.localIP());
   if (startHttpsServer()) {
     Serial.print("Secure admin page: https://");
-    Serial.print(DeviceIdentity::hostname());
-    Serial.println(".local/admin");
+    Serial.println(DeviceIdentity::dnsName() + "/admin");
     Serial.print("[entra] https ready free_heap=");
     Serial.println(ESP.getFreeHeap());
   } else {
@@ -54,6 +55,7 @@ void LocalWebServer::showHome() {
   page.replace("{{DESIGN_TOKENS}}", FPSTR(DESIGN_TOKENS_CSS));
   page.replace("{{VERSION}}", DeviceConfig::firmwareVersion);
   page.replace("{{HOSTNAME}}", DeviceIdentity::hostname());
+  page.replace("{{ADMIN_URL}}", DeviceIdentity::httpsAdminUrl());
   httpServer_.send(200, "text/html", page);
 }
 
@@ -61,7 +63,7 @@ void LocalWebServer::refuseInsecureAdmin() {
   httpServer_.sendHeader("Cache-Control", "no-store");
   httpServer_.send(426, "text/plain",
                    "Administration requires HTTPS. Open https://" +
-                       DeviceIdentity::hostname() + ".local/admin");
+                       DeviceIdentity::dnsName() + "/admin");
 }
 
 bool LocalWebServer::registerGet(const char* uri,
@@ -79,24 +81,48 @@ bool LocalWebServer::registerPost(const char* uri,
 }
 
 bool LocalWebServer::startHttpsServer() {
-  if (!TlsCredentials::configured()) {
-    Serial.println(
-        "TLS certificate is not provisioned. Copy "
-        "TlsCredentials.local.example.h to TlsCredentials.local.h.");
+  const uint32_t startMs = millis();
+  const uint32_t heapBefore = ESP.getFreeHeap();
+  if (!tlsStore_.begin()) {
+    Serial.println("TLS storage mount failed.");
     return false;
+  }
+  String tlsError;
+  if (!tlsStore_.loadActive(tlsError) || !tlsStore_.configured()) {
+    if (TlsCredentials::configured()) {
+      Serial.println("Bootstrapping TLS certificate from local header.");
+      if (!tlsStore_.stage(TlsCredentials::certificatePem, TlsCredentials::privateKeyPem,
+                           DeviceIdentity::dnsName(), tlsError) ||
+          !tlsStore_.configured()) {
+        Serial.print("TLS bootstrap failed: ");
+        Serial.println(tlsError);
+        return false;
+      }
+    } else {
+      Serial.print("TLS certificate is not provisioned in flash: ");
+      Serial.println(tlsError);
+      return false;
+    }
   }
 
   httpd_ssl_config_t config = HTTPD_SSL_CONFIG_DEFAULT();
-  config.httpd.max_uri_handlers = 10;
+  config.httpd.max_uri_handlers = 12;
   config.httpd.stack_size = 16384;
   config.servercert =
-      reinterpret_cast<const uint8_t*>(TlsCredentials::certificatePem);
-  config.servercert_len = strlen(TlsCredentials::certificatePem) + 1;
+      reinterpret_cast<const uint8_t*>(tlsStore_.certificatePem());
+  config.servercert_len = strlen(tlsStore_.certificatePem()) + 1;
   config.prvtkey_pem =
-      reinterpret_cast<const uint8_t*>(TlsCredentials::privateKeyPem);
-  config.prvtkey_len = strlen(TlsCredentials::privateKeyPem) + 1;
+      reinterpret_cast<const uint8_t*>(tlsStore_.privateKeyPem());
+  config.prvtkey_len = strlen(tlsStore_.privateKeyPem()) + 1;
 
   if (httpd_ssl_start(&httpsServer_, &config) != ESP_OK) return false;
+  const uint32_t heapAfter = ESP.getFreeHeap();
+  Serial.print("[https] start_ms=");
+  Serial.print(millis() - startMs);
+  Serial.print(" heap_before=");
+  Serial.print(heapBefore);
+  Serial.print(" heap_after=");
+  Serial.println(heapAfter);
 
   return registerGet("/", handleHttpsHome) &&
          registerGet("/admin", handleHttpsAdmin) &&
@@ -104,6 +130,7 @@ bool LocalWebServer::startHttpsServer() {
          registerPost("/admin/session", handleHttpsSessionPost) &&
          registerPost("/admin/session/cancel", handleHttpsSessionCancel) &&
          registerPost("/admin/logout", handleHttpsLogout) &&
+         registerPost("/admin/tls-certificate", handleHttpsTlsCertificate) &&
          registerPost("/admin/update", handleHttpsUpdate);
 }
 
@@ -138,11 +165,17 @@ esp_err_t LocalWebServer::handleHttpsUpdate(httpd_req_t* request) {
   return static_cast<LocalWebServer*>(request->user_ctx)->updateHttps(request);
 }
 
+esp_err_t LocalWebServer::handleHttpsTlsCertificate(httpd_req_t* request) {
+  return static_cast<LocalWebServer*>(request->user_ctx)
+      ->updateTlsCertificate(request);
+}
+
 esp_err_t LocalWebServer::sendHttpsHome(httpd_req_t* request) {
   String page = FPSTR(HOME_PAGE);
   page.replace("{{DESIGN_TOKENS}}", FPSTR(DESIGN_TOKENS_CSS));
   page.replace("{{VERSION}}", DeviceConfig::firmwareVersion);
   page.replace("{{HOSTNAME}}", DeviceIdentity::hostname());
+  page.replace("{{ADMIN_URL}}", DeviceIdentity::httpsAdminUrl());
   httpd_resp_set_type(request, "text/html");
   return httpd_resp_send(request, page.c_str(), page.length());
 }
@@ -262,6 +295,60 @@ esp_err_t LocalWebServer::updateHttps(httpd_req_t* request) {
   if (!requireSessionCsrf(request)) return ESP_OK;
   entraAuth_.sessions().touch();
   return otaUpdateService_.handleHttpsUpdate(request);
+}
+
+esp_err_t LocalWebServer::updateTlsCertificate(httpd_req_t* request) {
+  if (!requireSessionCsrf(request)) return ESP_OK;
+
+  if (request->content_len <= 0 || request->content_len > 20000) {
+    return sendText(request, "400 Bad Request", "text/plain",
+                    "Certificate payload is empty or too large.");
+  }
+
+  String body;
+  body.reserve(request->content_len);
+  int remaining = request->content_len;
+  char chunk[1024];
+  while (remaining > 0) {
+    const int wanted = remaining > static_cast<int>(sizeof(chunk))
+                           ? static_cast<int>(sizeof(chunk))
+                           : remaining;
+    const int received = httpd_req_recv(request, chunk, wanted);
+    if (received <= 0) {
+      return sendText(request, "400 Bad Request", "text/plain",
+                      "Failed to read certificate payload.");
+    }
+    body.concat(chunk, received);
+    remaining -= received;
+  }
+
+  cJSON* json = cJSON_Parse(body.c_str());
+  if (json == nullptr) {
+    return sendText(request, "400 Bad Request", "text/plain",
+                    "Certificate payload must be valid JSON.");
+  }
+  const cJSON* cert = cJSON_GetObjectItemCaseSensitive(json, "certificate_pem");
+  const cJSON* key = cJSON_GetObjectItemCaseSensitive(json, "private_key_pem");
+  if (!cJSON_IsString(cert) || !cJSON_IsString(key) || cert->valuestring == nullptr ||
+      key->valuestring == nullptr) {
+    cJSON_Delete(json);
+    return sendText(request, "400 Bad Request", "text/plain",
+                    "JSON must include certificate_pem and private_key_pem.");
+  }
+
+  String tlsError;
+  const bool staged =
+      tlsStore_.stage(cert->valuestring, key->valuestring, DeviceIdentity::dnsName(),
+                      tlsError);
+  cJSON_Delete(json);
+  if (!staged) {
+    const String message = "Certificate rejected: " + tlsError;
+    return sendText(request, "400 Bad Request", "text/plain",
+                    message.c_str());
+  }
+
+  return sendText(request, "200 OK", "text/plain",
+                  "Certificate stored and activated. Reboot to apply HTTPS.");
 }
 
 bool LocalWebServer::requireSession(httpd_req_t* request) {

@@ -2,6 +2,8 @@
 build/
 dist/
 src/config/TlsCredentials.local.h
+scripts/device-tls/node_modules/
+scripts/device-tls/.output/
 *.bin
 *.elf
 *.map

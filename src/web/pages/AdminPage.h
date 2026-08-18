@@ -24,9 +24,11 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
     gap:var(--ssd-space-300);margin-bottom:var(--ssd-space-400)}.meta div{
     background:var(--ssd-color-background-muted);padding:var(--ssd-space-300);
     border-radius:var(--ssd-radius-lg)}.meta small{display:block;color:var(--ssd-color-gray-700)}
-    form{display:grid;gap:var(--ssd-space-300)}input,button{width:100%;font:inherit;
+    form{display:grid;gap:var(--ssd-space-300)}input,button,textarea{width:100%;font:inherit;
     padding:12px;border-radius:var(--ssd-radius-md)}input{border:1px solid
     var(--ssd-color-border-default);background:var(--ssd-color-background-default)}
+    textarea{border:1px solid var(--ssd-color-border-default);background:
+    var(--ssd-color-background-default);min-height:7rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
     button{border:0;background:var(--ssd-color-background-brand);color:
     var(--ssd-color-text-on-brand);font-weight:var(--ssd-font-weight-bold);cursor:pointer}
     button.secondary{background:var(--ssd-color-background-default);color:
@@ -54,12 +56,22 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
       <progress id="progress" max="100" value="0"></progress>
       <button type="submit">Install firmware</button><div id="status" role="status"></div>
     </form>
+    <h2>TLS certificate rotation</h2>
+    <p>Upload a renewed certificate bundle for this device hostname.</p>
+    <form id="tls"><label>Certificate PEM
+      <textarea id="certificatePem" required spellcheck="false"></textarea></label>
+      <label>Private key PEM
+      <textarea id="privateKeyPem" required spellcheck="false"></textarea></label>
+      <button type="submit">Activate certificate</button>
+      <div id="tlsStatus" role="status"></div>
+    </form>
     <button class="secondary" id="logout" type="button">Sign out</button>
   </section>
   <script>
     const csrf='{{CSRF}}';
     const form=document.querySelector('#ota'),file=document.querySelector('#firmware'),
       progress=document.querySelector('#progress'),status=document.querySelector('#status');
+    const tlsForm=document.querySelector('#tls'),tlsStatus=document.querySelector('#tlsStatus');
     form.addEventListener('submit',event=>{event.preventDefault();const request=new XMLHttpRequest();
       request.open('POST','/admin/update');request.upload.onprogress=e=>{
         if(e.lengthComputable)progress.value=Math.round(e.loaded/e.total*100)};
@@ -69,6 +81,16 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
       request.setRequestHeader('Content-Type','application/octet-stream');
       request.setRequestHeader('X-CSRF-Token',csrf);
       status.textContent='Uploading firmware...';request.send(file.files[0])});
+    tlsForm.addEventListener('submit',async event=>{event.preventDefault();
+      const certificatePem=document.querySelector('#certificatePem').value.trim();
+      const privateKeyPem=document.querySelector('#privateKeyPem').value.trim();
+      tlsStatus.textContent='Validating and storing certificate...';
+      const response=await fetch('/admin/tls-certificate',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
+        body:JSON.stringify({certificate_pem:certificatePem,private_key_pem:privateKeyPem})});
+      tlsStatus.textContent=await response.text();
+      if(response.status===401||response.status===403)location.reload();
+    });
     document.querySelector('#logout').addEventListener('click',async()=>{
       await fetch('/admin/logout',{method:'POST',credentials:'same-origin',
         headers:{'X-CSRF-Token':csrf}});
