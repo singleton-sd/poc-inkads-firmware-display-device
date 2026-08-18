@@ -37,22 +37,26 @@ The pull-request title check enforces the shape, accepted types, and required
 ticket reference. Release Please uses the merged Conventional Commits to
 prepare release notes and choose the next semantic version.
 
+For local commits, the repo-managed hooks derive the ticket from a matching
+branch name such as `feature/POC-247-conventional-commit-hooks` and append it
+to the commit subject automatically. If you type a different ticket manually,
+the commit is rejected.
+
 ## Local hook setup
 
 Install the repo-managed Git hooks once per clone:
 
-```powershell
-.\scripts\install-git-hooks.ps1
-```
-
-This configures:
-
-```powershell
+```sh
 git config core.hooksPath .githooks
 ```
 
-After that, local commits are validated before Git creates them. The same rule
-also applies to pull-request titles in CI.
+After that:
+
+- `prepare-commit-msg` appends the branch ticket to valid Conventional Commit
+  subjects on `feature/...` and `hotfix/...` branches
+- `commit-msg` validates the final subject and blocks ticket mismatches
+- CI still validates pull-request titles, which must include the ticket
+  explicitly because GitHub cannot infer it from your local branch name
 
 ## Release process
 
