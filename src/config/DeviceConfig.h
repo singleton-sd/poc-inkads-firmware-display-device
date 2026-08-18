@@ -14,5 +14,5 @@ constexpr char ssidKey[] = "wifi_ssid";
 constexpr char passwordKey[] = "wifi_pass";
 constexpr char adminPasswordKey[] = "admin_pass";
 constexpr char setupApPrefix[] = "InkAds-Setup";
-constexpr char firmwareVersion[] = "0.2.0";  // x-release-please-version
+constexpr char firmwareVersion[] = "0.3.0";  // x-release-please-version
 }  // namespace DeviceConfig
