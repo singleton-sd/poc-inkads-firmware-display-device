@@ -30,11 +30,15 @@ jobs:
 
       - name: Compile firmware
         run: |
-          mkdir -p dist
+          # Arduino CLI requires the folder name to match display-device.ino.
+          # GitHub Actions checks out into a folder named after the repository.
+          sketch_dir="${RUNNER_TEMP}/display-device"
+          mkdir -p "$sketch_dir" dist
+          rsync -a --exclude '.git' --exclude dist ./ "$sketch_dir/"
           arduino-cli compile \
             --fqbn esp32:esp32:mhetesp32minikit \
-            --output-dir dist \
-            .
+            --output-dir "${GITHUB_WORKSPACE}/dist" \
+            "$sketch_dir"
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
