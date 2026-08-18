@@ -20,6 +20,6 @@ class Application {
   WifiConnection wifiConnection_;
   ProvisioningPortal provisioningPortal_{configStore_};
   MdnsService mdnsService_;
-  LocalWebServer localWebServer_;
+  LocalWebServer localWebServer_{configStore_};
   DeviceMode deviceMode_ = DeviceMode::Starting;
 };

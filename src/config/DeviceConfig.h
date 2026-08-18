@@ -14,6 +14,7 @@ constexpr char ssidKey[] = "wifi_ssid";
 constexpr char passwordKey[] = "wifi_pass";
 constexpr char adminPasswordKey[] = "admin_pass";
 constexpr char setupApPrefix[] = "InkAds-Setup";
+constexpr size_t maxScanResults = 24;
 constexpr char deviceDnsZone[] = "devices.singletonsd.com";
 constexpr char firmwareVersion[] = "0.4.0";  // x-release-please-version
 }  // namespace DeviceConfig

@@ -12,7 +12,7 @@ folder, so the thin entrypoint is named `display-device.ino`.
 3. If configuration is absent or connection fails, create
    `InkAds-Setup-XXXXXX`.
 4. Run wildcard DNS and a captive setup page at `http://192.168.4.1`.
-5. Save submitted credentials to NVS and restart.
+5. Scan nearby 2.4 GHz networks, save submitted credentials to NVS, and restart.
 6. Connect to Wi-Fi, synchronize time over NTP, and enter normal mode.
 
 After credentials are saved, the browser displays a 15-second countdown and
@@ -26,6 +26,12 @@ Administration is served only over HTTPS at `/admin`. The trusted URL is
 device suffix from `ESP.getEfuseMac()`. Sign-in uses Microsoft Entra Device
 Code Flow. The device talks to the tenant authority directly; it does not host
 a password and does not use a client secret.
+
+The admin page can scan and change the 2.4 GHz Wi-Fi network, erase saved
+settings, rotate the TLS certificate, and install an Arduino application
+`.bin` through the ESP32 OTA partition. Setup and admin both load
+`/networks` for a scanned SSID list, with an Other option for hidden or
+missing names. Password values are never logged.
 
 All HTML, JavaScript, CSS, and the required Singleton SD design tokens are
 compiled into the firmware. The device does not request internet-hosted assets.
@@ -121,10 +127,8 @@ settings are wrong:
 2. If TLS material in flash is invalid/expired and remote rotation cannot be
    completed, re-provision via admin upload after bootstrapping a temporary
    local cert (`TlsCredentials.local.h`) if needed.
-3. To clear Wi-Fi settings during development, call `configStore.clear()` from
-   a temporary path, upload once, then remove that call.
-
-A dedicated physical factory-reset control is still a follow-up task.
+3. Use the factory reset action on the local admin page to clear saved Wi-Fi
+   and reboot back into setup mode.
 
 ## Debug logging
 
@@ -173,3 +177,4 @@ Arduino core.
 - Tampered session cookie: rejected.
 - Reboot: previous session is gone.
 - Signing-key rotation: the next validation refreshes JWKS.
+- Authenticated admin can refresh networks, change Wi-Fi, and factory reset.

@@ -1,18 +1,81 @@
 #include "LocalWebServer.h"
 
 #include <cstring>
+#include <memory>
 #include <WiFi.h>
 #include <cJSON.h>
 #include <esp_https_server.h>
 
 #include "../config/DeviceConfig.h"
+#include "../config/DeviceSettings.h"
 #include "../config/EntraConfig.h"
 #include "../config/TlsCredentials.h"
+#include "../network/WifiScan.h"
 #include "../platform/DeviceIdentity.h"
 #include "pages/AdminPage.h"
 #include "pages/HomePage.h"
 #include "pages/SignInPage.h"
 #include "styles/DesignTokens.h"
+
+namespace {
+String urlDecode(const char* encoded) {
+  String decoded;
+  if (encoded == nullptr) return decoded;
+
+  for (size_t index = 0; encoded[index] != '\0'; ++index) {
+    const char character = encoded[index];
+    if (character == '+') {
+      decoded += ' ';
+      continue;
+    }
+    if (character == '%' && isxdigit(encoded[index + 1]) &&
+        isxdigit(encoded[index + 2])) {
+      char value[3] = {encoded[index + 1], encoded[index + 2], '\0'};
+      decoded += static_cast<char>(strtol(value, nullptr, 16));
+      index += 2;
+      continue;
+    }
+    decoded += character;
+  }
+
+  return decoded;
+}
+
+bool readRequestBody(httpd_req_t* request, String& body) {
+  body = "";
+  if (request->content_len <= 0) return true;
+
+  body.reserve(request->content_len);
+  char chunk[128];
+  int remaining = request->content_len;
+  while (remaining > 0) {
+    const int wanted = remaining > static_cast<int>(sizeof(chunk))
+                           ? static_cast<int>(sizeof(chunk))
+                           : remaining;
+    const int received = httpd_req_recv(request, chunk, wanted);
+    if (received <= 0) return false;
+    body.concat(chunk, received);
+    remaining -= received;
+  }
+  return true;
+}
+
+String readFormValue(const String& body, const char* key) {
+  if (body.isEmpty()) return "";
+
+  std::unique_ptr<char[]> form(new char[body.length() + 1]);
+  memcpy(form.get(), body.c_str(), body.length() + 1);
+
+  char value[128] = {};
+  if (httpd_query_key_value(form.get(), key, value, sizeof(value)) != ESP_OK) {
+    return "";
+  }
+  return urlDecode(value);
+}
+}  // namespace
+
+LocalWebServer::LocalWebServer(ConfigStore& configStore)
+    : configStore_(configStore) {}
 
 void LocalWebServer::begin() {
   httpServer_.on("/", HTTP_GET, [this]() { showHome(); });
@@ -28,6 +91,11 @@ void LocalWebServer::begin() {
   httpServer_.on("/admin/tls-certificate", HTTP_POST,
                  [this]() { refuseInsecureAdmin(); });
   httpServer_.on("/admin/update", HTTP_POST,
+                 [this]() { refuseInsecureAdmin(); });
+  httpServer_.on("/networks", HTTP_GET, [this]() { refuseInsecureAdmin(); });
+  httpServer_.on("/admin/wifi", HTTP_POST,
+                 [this]() { refuseInsecureAdmin(); });
+  httpServer_.on("/admin/reset", HTTP_POST,
                  [this]() { refuseInsecureAdmin(); });
   httpServer_.onNotFound(
       [this]() { httpServer_.send(404, "text/plain", "Not found"); });
@@ -106,7 +174,7 @@ bool LocalWebServer::startHttpsServer() {
   }
 
   httpd_ssl_config_t config = HTTPD_SSL_CONFIG_DEFAULT();
-  config.httpd.max_uri_handlers = 12;
+  config.httpd.max_uri_handlers = 16;
   config.httpd.stack_size = 16384;
   config.servercert =
       reinterpret_cast<const uint8_t*>(tlsStore_.certificatePem());
@@ -131,7 +199,10 @@ bool LocalWebServer::startHttpsServer() {
          registerPost("/admin/session/cancel", handleHttpsSessionCancel) &&
          registerPost("/admin/logout", handleHttpsLogout) &&
          registerPost("/admin/tls-certificate", handleHttpsTlsCertificate) &&
-         registerPost("/admin/update", handleHttpsUpdate);
+         registerPost("/admin/update", handleHttpsUpdate) &&
+         registerGet("/networks", handleHttpsNetworks) &&
+         registerPost("/admin/wifi", handleHttpsWifi) &&
+         registerPost("/admin/reset", handleHttpsReset);
 }
 
 esp_err_t LocalWebServer::handleHttpsHome(httpd_req_t* request) {
@@ -170,6 +241,19 @@ esp_err_t LocalWebServer::handleHttpsTlsCertificate(httpd_req_t* request) {
       ->updateTlsCertificate(request);
 }
 
+esp_err_t LocalWebServer::handleHttpsNetworks(httpd_req_t* request) {
+  return static_cast<LocalWebServer*>(request->user_ctx)
+      ->sendHttpsNetworks(request);
+}
+
+esp_err_t LocalWebServer::handleHttpsWifi(httpd_req_t* request) {
+  return static_cast<LocalWebServer*>(request->user_ctx)->updateWifiHttps(request);
+}
+
+esp_err_t LocalWebServer::handleHttpsReset(httpd_req_t* request) {
+  return static_cast<LocalWebServer*>(request->user_ctx)->resetHttps(request);
+}
+
 esp_err_t LocalWebServer::sendHttpsHome(httpd_req_t* request) {
   String page = FPSTR(HOME_PAGE);
   page.replace("{{DESIGN_TOKENS}}", FPSTR(DESIGN_TOKENS_CSS));
@@ -189,6 +273,8 @@ esp_err_t LocalWebServer::sendHttpsAdmin(httpd_req_t* request) {
     page.replace("{{DESIGN_TOKENS}}", FPSTR(DESIGN_TOKENS_CSS));
     page.replace("{{VERSION}}", DeviceConfig::firmwareVersion);
     page.replace("{{IP}}", WiFi.localIP().toString());
+    const String connectedSsid = WiFi.SSID();
+    page.replace("{{SSID}}", connectedSsid.isEmpty() ? "(unknown)" : connectedSsid);
     page.replace("{{CSRF}}", entraAuth_.sessions().csrfHex());
     entraAuth_.sessions().applySessionCookie(request);
     httpd_resp_set_type(request, "text/html");
@@ -294,6 +380,7 @@ esp_err_t LocalWebServer::logoutHttps(httpd_req_t* request) {
 esp_err_t LocalWebServer::updateHttps(httpd_req_t* request) {
   if (!requireSessionCsrf(request)) return ESP_OK;
   entraAuth_.sessions().touch();
+  entraAuth_.sessions().applySessionCookie(request);
   return otaUpdateService_.handleHttpsUpdate(request);
 }
 
@@ -349,6 +436,62 @@ esp_err_t LocalWebServer::updateTlsCertificate(httpd_req_t* request) {
 
   return sendText(request, "200 OK", "text/plain",
                   "Certificate stored and activated. Reboot to apply HTTPS.");
+}
+
+esp_err_t LocalWebServer::sendHttpsNetworks(httpd_req_t* request) {
+  if (!requireSession(request)) return ESP_OK;
+  entraAuth_.sessions().touch();
+  entraAuth_.sessions().applySessionCookie(request);
+  httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+  httpd_resp_set_type(request, "application/json");
+  const String body = WifiScan::toJson();
+  return httpd_resp_send(request, body.c_str(), body.length());
+}
+
+esp_err_t LocalWebServer::updateWifiHttps(httpd_req_t* request) {
+  if (!requireSessionCsrf(request)) return ESP_OK;
+
+  String body;
+  if (!readRequestBody(request, body)) {
+    return sendText(request, "400 Bad Request", "text/plain",
+                    "Could not read the Wi-Fi form.");
+  }
+
+  DeviceSettings settings = configStore_.load();
+  settings.ssid = readFormValue(body, "ssid");
+  settings.password = readFormValue(body, "password");
+  settings.ssid.trim();
+
+  if (!configStore_.save(settings)) {
+    return sendText(request, "400 Bad Request", "text/plain",
+                    "Invalid Wi-Fi settings. Check the network name.");
+  }
+
+  entraAuth_.sessions().touch();
+  entraAuth_.sessions().applySessionCookie(request);
+  sendText(request, "200 OK", "text/plain",
+           "Wi-Fi saved. The device is restarting...");
+  delay(DeviceConfig::restartDelayMs);
+  ESP.restart();
+  return ESP_OK;
+}
+
+esp_err_t LocalWebServer::resetHttps(httpd_req_t* request) {
+  if (!requireSessionCsrf(request)) return ESP_OK;
+  drainBody(request);
+
+  if (!configStore_.clear()) {
+    return sendText(request, "500 Internal Server Error", "text/plain",
+                    "Could not erase saved data. The device was not changed.");
+  }
+
+  entraAuth_.signOut();
+  entraAuth_.sessions().applyExpiredSessionCookie(request);
+  sendText(request, "200 OK", "text/plain",
+           "Saved data erased. The device is restarting...");
+  delay(DeviceConfig::restartDelayMs);
+  ESP.restart();
+  return ESP_OK;
 }
 
 bool LocalWebServer::requireSession(httpd_req_t* request) {

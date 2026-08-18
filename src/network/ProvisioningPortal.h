@@ -16,6 +16,7 @@ class ProvisioningPortal {
  private:
   void showPortal();
   void saveCredentials();
+  void showNetworks();
   void redirectToPortal();
   String buildAccessPointName() const;
 
