@@ -42,6 +42,7 @@ jobs:
             -v "$PWD:/app" \
             orhunp/git-cliff:2.13.1 \
             --config cliff.toml \
+            --unreleased \
             --tag "$NEXT_TAG" \
             --prepend CHANGELOG.md
 
