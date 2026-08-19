@@ -74,6 +74,24 @@ No third-party Arduino libraries. Do not commit `dist/`, `build/`, or
 `src/config/TlsCredentials.local.h`. Upload is optional and port-specific;
 compile is the default check.
 
+## Feature flags (mandatory for new features)
+
+Arduino compiles every `.cpp` in the sketch. New optional behaviour must be a
+catalog feature, not a runtime `if`, so size-reduced targets can leave it out.
+
+When developing a feature:
+
+1. Add the name to `targets.json` `features` (lowercase, underscores allowed).
+2. Gate code with `#if INKADS_FEATURE_<NAME>` (`https_admin` →
+   `INKADS_FEATURE_HTTPS_ADMIN`).
+3. Enable it on every target with `"suffix": "full"`. That is the shipping cut.
+4. Omit it from smaller suffixes only when flash size requires it.
+5. Update committed `src/config/InkAdsFeatures.h` so Arduino IDE matches
+   `full` (use `1`). Leave a stub at `0` only while the feature is not
+   implemented.
+
+Do not ship a developed feature that is missing from `full`.
+
 ## Pull requests
 
 This repo squash-merges. The **PR title becomes the only commit** the release

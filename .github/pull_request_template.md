@@ -7,6 +7,8 @@
 
 - [ ] `bash scripts/test/run.sh` succeeds
 - [ ] `bash scripts/compile.sh` succeeds
+- [ ] New optional device behaviour has an `INKADS_FEATURE_*` flag, is listed
+      in `targets.json`, and is enabled on every `full` target
 - [ ]
 
 ## Feedback focus

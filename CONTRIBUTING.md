@@ -87,6 +87,32 @@ a generated release companion that is validated against it on every build.
 Artifact names also take that version. Add another `targets.json` row to
 compile a second board or a size-reduced feature cut of the same board.
 
+## Compile-time feature flags
+
+New device features must be include/exclude flags. `full` is the product
+build and must include every developed feature. Smaller suffixes exist only
+to drop flags so the binary still fits flash.
+
+Arduino CLI compiles every `.cpp` in the sketch, so unused code has to be
+removed at compile time with `#if`, not a runtime `if`.
+
+When you add a feature:
+
+1. Register the name in `targets.json` `features` (lowercase; underscores
+   are allowed, for example `https_admin`).
+2. Wrap the implementation in `#if INKADS_FEATURE_<NAME>`. The macro is the
+   feature name in uppercase (`https_admin` → `INKADS_FEATURE_HTTPS_ADMIN`).
+3. Add the name to the `features` array of every target with
+   `"suffix": "full"`.
+4. On size-reduced targets, list only the flags that cut needs.
+5. Set the matching `#define` in committed `src/config/InkAdsFeatures.h` to
+   `1` so Arduino IDE matches `full`. Use `0` only for an unimplemented
+   stub (today: `epaper`).
+
+`scripts/compile.sh` overwrites `InkAdsFeatures.h` in a temp sketch copy
+from the catalog before each compile. The committed header is the IDE
+default, not the CI source of truth.
+
 Catalog tests:
 
 ```sh

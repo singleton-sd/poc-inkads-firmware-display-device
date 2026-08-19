@@ -158,6 +158,10 @@ Module`), select an OTA-capable partition scheme, and upload. Local IDE
 builds use the committed defaults in `src/config/InkAdsFeatures.h`. CI
 overwrites that header per `targets.json` row before `arduino-cli compile`.
 
+New optional behaviour needs a catalog feature flag so each compile can
+include or drop it. Enable developed features on the `full` suffix; see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 For first-time bootstrap only, copy `src/config/TlsCredentials.local.example.h`
 to `src/config/TlsCredentials.local.h` and provision a device certificate whose
 subject contains `inkads-xxxxxx.devices.singletonsd.com`.
