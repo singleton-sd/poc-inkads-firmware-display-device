@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.0.0 - 2026-08-19
+[Full Changelog](https://github.com/singleton-sd/poc-inkads-firmware-display-device/compare/v0.5.0...v1.0.0)
+
+
+
+### Features
+
+- Add versioned multi-target firmware assets [POC-251] (#18) (f1241a6)
+
+
+### Maintenance
+
+- Attach versioned firmware binaries [POC-240] (#17) (a222c83)
+
 ## v0.5.0 - 2026-08-18
 [Full Changelog](https://github.com/singleton-sd/poc-inkads-firmware-display-device/compare/v0.4.0...v0.5.0)
 
