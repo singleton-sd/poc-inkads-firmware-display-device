@@ -32,7 +32,7 @@ assert_contains() {
 must_fail() {
   local label="$1"
   shift
-  if INKADS_CATALOG="$1" INKADS_VERSION_FILE="$2" "$CATALOG_BIN" validate >/dev/null 2>"$TMP/err"; then
+  if INKADS_CATALOG="$1" INKADS_VERSION_FILE="$2" bash "$CATALOG_BIN" validate >/dev/null 2>"$TMP/err"; then
     echo "expected failure: $label" >&2
     exit 1
   fi
@@ -45,7 +45,7 @@ trap 'rm -rf "$TMP"' EXIT
 resolved="$(
   INKADS_CATALOG="$FIXTURES/catalog-valid.json" \
     INKADS_VERSION_FILE="$FIXTURES/version-0.2.0.json" \
-    "$CATALOG_BIN" resolve mhetesp32minikit-full
+    bash "$CATALOG_BIN" resolve mhetesp32minikit-full
 )"
 assert_eq "inkads-mhetesp32minikit-full-v0.2.0" "$(printf '%s' "$resolved" | jq -er '.artifactStem')" "full stem v0.2.0"
 assert_eq "mhetesp32minikit-full" "$(printf '%s' "$resolved" | jq -er '.id')" "target id omits version"
@@ -56,7 +56,7 @@ assert_eq "esp32:esp32:mhetesp32minikit" "$(printf '%s' "$resolved" | jq -er '.f
 resolved_new="$(
   INKADS_CATALOG="$FIXTURES/catalog-valid.json" \
     INKADS_VERSION_FILE="$FIXTURES/version-1.4.0.json" \
-    "$CATALOG_BIN" resolve mhetesp32minikit-full
+    bash "$CATALOG_BIN" resolve mhetesp32minikit-full
 )"
 assert_eq "inkads-mhetesp32minikit-full-v1.4.0" "$(printf '%s' "$resolved_new" | jq -er '.artifactStem')" "stem follows version.json"
 assert_eq "mhetesp32minikit-full" "$(printf '%s' "$resolved_new" | jq -er '.id')" "target id stable across versions"
@@ -64,17 +64,17 @@ assert_eq "mhetesp32minikit-full" "$(printf '%s' "$resolved_new" | jq -er '.id')
 lite="$(
   INKADS_CATALOG="$FIXTURES/catalog-lite.json" \
     INKADS_VERSION_FILE="$FIXTURES/version-0.2.0.json" \
-    "$CATALOG_BIN" resolve mhetesp32minikit-lite
+    bash "$CATALOG_BIN" resolve mhetesp32minikit-lite
 )"
 assert_eq "inkads-mhetesp32minikit-lite-v0.2.0" "$(printf '%s' "$lite" | jq -er '.artifactStem')" "lite stem"
 assert_eq "false" "$(printf '%s' "$lite" | jq -er '.features | index("entra") != null')" "lite omits entra"
 
 INKADS_CATALOG="$FIXTURES/catalog-lite.json" \
   INKADS_VERSION_FILE="$FIXTURES/version-0.2.0.json" \
-  "$CATALOG_BIN" write-features mhetesp32minikit-full "$TMP/full.h"
+  bash "$CATALOG_BIN" write-features mhetesp32minikit-full "$TMP/full.h"
 INKADS_CATALOG="$FIXTURES/catalog-lite.json" \
   INKADS_VERSION_FILE="$FIXTURES/version-0.2.0.json" \
-  "$CATALOG_BIN" write-features mhetesp32minikit-lite "$TMP/lite.h"
+  bash "$CATALOG_BIN" write-features mhetesp32minikit-lite "$TMP/lite.h"
 
 assert_contains "$(cat "$TMP/full.h")" '#define INKADS_TARGET_ID "mhetesp32minikit-full"' "full target id define"
 assert_contains "$(cat "$TMP/full.h")" '#define INKADS_FEATURE_ENTRA 1' "full entra on"
@@ -85,7 +85,7 @@ assert_contains "$(cat "$TMP/lite.h")" '#define INKADS_FEATURE_WIFI 1' "lite wif
 matrix="$(
   INKADS_CATALOG="$FIXTURES/catalog-lite.json" \
     INKADS_VERSION_FILE="$FIXTURES/version-0.2.0.json" \
-    "$CATALOG_BIN" matrix
+    bash "$CATALOG_BIN" matrix
 )"
 assert_eq "2" "$(printf '%s' "$matrix" | jq -er '.include | length')" "matrix has two targets"
 assert_eq "inkads-mhetesp32minikit-full-v0.2.0" "$(printf '%s' "$matrix" | jq -er '.include[0].artifactStem')" "matrix full stem"

@@ -1,8 +1,6 @@
 name: Firmware build
 
 on:
-  push:
-    branches: [master, main]
   pull_request:
   workflow_dispatch:
 
@@ -43,14 +41,6 @@ jobs:
 
       - uses: arduino/setup-arduino-cli@v2
 
-      - name: Install ESP32 platform
-        run: |
-          arduino-cli config init
-          arduino-cli config add board_manager.additional_urls \
-            https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          arduino-cli core update-index
-          arduino-cli core install esp32:esp32@3.3.11
-
       - name: Compile ${{ matrix.id }}
         run: bash scripts/compile.sh --target "${{ matrix.id }}"
 
@@ -58,7 +48,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifactStem }}
-          path: |
-            dist/${{ matrix.artifactStem }}.bin
-            dist/${{ matrix.artifactStem }}-factory.bin
+          path: dist/*.bin
           if-no-files-found: error

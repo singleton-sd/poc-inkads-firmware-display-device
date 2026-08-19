@@ -145,8 +145,9 @@ On boot, any leftover NVS `admin_pass` value from earlier firmware is deleted.
 Release automation runs on merges to `main` and does not open version-bump PRs.
 
 - Conventional Commits drive semantic versioning (`feat` -> minor, `fix/perf/refactor/revert` -> patch, breaking change -> major).
-- The release workflow updates `version.json` and `src/config/DeviceConfig.h`, prepends `CHANGELOG.md` using `git-cliff`, creates a release commit, and tags it as `vX.Y.Z`.
-- Pushing the release tag triggers `.github/workflows/firmware-release.yml`, which compiles every `targets.json` row and publishes `inkads-{filename}-{suffix}-v{version}.bin` plus `inkads-manifest.json`.
+- When a version bump is due, the release workflow updates `version.json` and `src/config/DeviceConfig.h`, prepends `CHANGELOG.md` using `git-cliff`, compiles every `targets.json` row, tags `vX.Y.Z`, and attaches `inkads-{filename}-{suffix}-v{version}.bin`, `inkads-manifest.json`, and remaining `dist/*.bin` extras to the GitHub Release.
+- Unversioned pushes to `main` (`docs`, `ci`, `chore`, and similar) do not compile. Pull requests still compile in Firmware build.
+- To republish an existing tag, run Actions → Firmware release → Run workflow.
 
 To keep release behavior predictable, use Conventional Commit titles for squash-merge commits, including a ticket reference as described in [CONTRIBUTING.md](CONTRIBUTING.md).
 

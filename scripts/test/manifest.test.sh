@@ -21,8 +21,8 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/dist"
 
-stem="$("$CATALOG_BIN" resolve mhetesp32minikit-full | jq -er '.artifactStem')"
-version="$("$CATALOG_BIN" resolve mhetesp32minikit-full | jq -er '.version')"
+stem="$(bash "$CATALOG_BIN" resolve mhetesp32minikit-full | jq -er '.artifactStem')"
+version="$(bash "$CATALOG_BIN" resolve mhetesp32minikit-full | jq -er '.version')"
 printf dummy >"$TMP/dist/${stem}.bin"
 
 GITHUB_REPOSITORY=example/inkads RELEASE_TAG="v${version}" \

@@ -36,7 +36,7 @@ published="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 targets_json='{}'
 while IFS= read -r id; do
-  resolved="$("$CATALOG_BIN" resolve "$id")"
+  resolved="$(bash "$CATALOG_BIN" resolve "$id")"
   stem="$(printf '%s' "$resolved" | jq -er '.artifactStem')"
   bin="$DIST/${stem}.bin"
   [[ -f "$bin" ]] || die "missing release binary: $bin"
@@ -51,7 +51,7 @@ while IFS= read -r id; do
     --argjson features "$(printf '%s' "$resolved" | jq -c '.features')" \
     '{url:$url,sha256:$sha,size:$size,suffix:$suffix,features:$features}')"
   targets_json="$(jq -c --arg id "$id" --argjson entry "$entry" '. + {($id): $entry}' <<<"$targets_json")"
-done < <("$CATALOG_BIN" list)
+done < <(bash "$CATALOG_BIN" list)
 
 
 jq -n \

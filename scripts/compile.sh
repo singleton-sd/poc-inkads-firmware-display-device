@@ -41,7 +41,6 @@ done
 
 command -v arduino-cli >/dev/null || die 'arduino-cli is not on PATH'
 command -v jq >/dev/null || die 'jq is required to read targets.json'
-[[ -x "$CATALOG_BIN" ]] || chmod +x "$CATALOG_BIN"
 
 ensure_core() {
   if arduino-cli core list 2>/dev/null | grep -F 'esp32:esp32' | grep -q '3.3.11'; then
@@ -92,7 +91,7 @@ check_size() {
 compile_one() {
   local id="$1"
   local resolved fqbn stem sketch log_file
-  resolved="$("$CATALOG_BIN" resolve "$id")"
+  resolved="$(bash "$CATALOG_BIN" resolve "$id")"
   fqbn="$(printf '%s' "$resolved" | jq -er '.fqbn')"
   stem="$(printf '%s' "$resolved" | jq -er '.artifactStem')"
 
@@ -102,7 +101,7 @@ compile_one() {
 
   sketch="$TMP/display-device"
   copy_sketch "$sketch"
-  "$CATALOG_BIN" write-features "$id" "$sketch/src/config/InkAdsFeatures.h"
+  bash "$CATALOG_BIN" write-features "$id" "$sketch/src/config/InkAdsFeatures.h"
 
   mkdir -p "$DIST"
   log_file="$TMP/compile.log"
@@ -131,7 +130,7 @@ ensure_core
 DIST="$REPO_ROOT/dist"
 mkdir -p "$DIST"
 
-"$CATALOG_BIN" validate
+bash "$CATALOG_BIN" validate
 
 if [[ -n "$TARGET_ID" && "$COMPILE_ALL" -eq 1 ]]; then
   die 'use either --target or --all, not both'
@@ -144,4 +143,4 @@ fi
 
 while IFS= read -r id; do
   compile_one "$id"
-done < <("$CATALOG_BIN" list)
+done < <(bash "$CATALOG_BIN" list)

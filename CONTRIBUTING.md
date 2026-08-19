@@ -70,16 +70,17 @@ After that:
 2. The main-merge release workflow runs `scripts/release_plan.sh`. If there
    are releasable commits since the last tag (or since the last
    `version.json` change when no tags exist), it updates `version.json` and
-   `DeviceConfig.h`, prepends `CHANGELOG.md` with `git-cliff`, and pushes a
-   `vX.Y.Z` tag.
+   `DeviceConfig.h`, prepends `CHANGELOG.md` with `git-cliff`, compiles the
+   stamped firmware, and pushes a `vX.Y.Z` tag.
 3. Maintenance commits (`docs`, `test`, `build`, `ci`, `chore`) do not
-   create a release by themselves. `feat` is a minor bump, `fix` /
-   `perf` / `refactor` / `revert` are patch bumps, and a breaking change is
-   a major bump.
-4. Pushing the tag triggers the firmware release workflow, which validates
-   the version, compiles every row in `targets.json`, writes versioned
-   `inkads-{filename}-{suffix}-v{version}.bin` assets plus
-   `inkads-manifest.json`, and publishes the GitHub Release.
+   create a release by themselves and do not compile on `main`. `feat` is a
+   minor bump, `fix` / `perf` / `refactor` / `revert` are patch bumps, and
+   a breaking change is a major bump.
+4. After the tag is pushed, the same workflow compiles every `targets.json`
+   row and attaches `inkads-{filename}-{suffix}-v{version}.bin` assets,
+   `inkads-manifest.json`, and remaining `dist/*.bin` extras to the GitHub
+   Release. Firmware release remains available to compile and publish an
+   existing tag from Actions.
 
 `version.json` is the canonical firmware version. The C++ constant is
 a generated release companion that is validated against it on every build.
