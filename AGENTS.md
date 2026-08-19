@@ -42,6 +42,9 @@ InkAds/                              <-- open this workspace
 - Folder name = branch without `feature/` / `hotfix/`
 - Create from `origin/main` only. Each implementer subagent gets its own worktree.
 - After merge or abandon: `git worktree remove ../worktrees/<POC-###>-<slug>` then `git worktree prune`
+- **When told to close the ticket:** mark ClickUp **complete**, then remove and
+  prune that ticket's worktree before finishing. Do not leave a closed ticket's
+  worktree on disk.
 - On this Windows machine, git may need `git -c safe.directory=<abs-path>` (the helper sets it)
 
 Do not invent sibling `firmware/display-device-*` folders or in-repo `.worktrees/`.
@@ -141,6 +144,21 @@ Releases: Conventional Commits on `main` drive `scripts/release_plan.sh` +
 
 Product folder: [InkAds](https://app.clickup.com/90161394355/v/f/901610926351/90165834867)
 (list 03 — Device Firmware).
+
+### Close ticket
+
+When the user asks to close the ticket (or the PR is merged and handoff is
+done):
+
+1. Set the ClickUp task to **complete** and comment with the merged PR URL.
+2. From `firmware/display-device`, remove the ticket worktree and prune:
+
+```bash
+git worktree remove ../worktrees/<POC-###>-<slug>
+git worktree prune
+```
+
+Do not treat ClickUp close as finished until the worktree is gone.
 
 ## Do not
 
