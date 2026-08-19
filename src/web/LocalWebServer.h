@@ -3,10 +3,17 @@
 #include <WebServer.h>
 #include <esp_http_server.h>
 
-#include "../auth/EntraAuthService.h"
 #include "../config/ConfigStore.h"
+#include "../config/InkAdsFeatures.h"
+#if INKADS_FEATURE_ENTRA
+#include "../auth/EntraAuthService.h"
+#endif
+#if INKADS_FEATURE_HTTPS_ADMIN
 #include "../config/TlsCertificateStore.h"
+#endif
+#if INKADS_FEATURE_OTA
 #include "../update/OtaUpdateService.h"
+#endif
 
 class LocalWebServer {
  public:
@@ -52,7 +59,13 @@ class LocalWebServer {
   ConfigStore& configStore_;
   WebServer httpServer_{80};
   httpd_handle_t httpsServer_ = nullptr;
+#if INKADS_FEATURE_OTA
   OtaUpdateService otaUpdateService_;
+#endif
+#if INKADS_FEATURE_ENTRA
   EntraAuthService entraAuth_;
+#endif
+#if INKADS_FEATURE_HTTPS_ADMIN
   TlsCertificateStore tlsStore_;
+#endif
 };

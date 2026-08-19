@@ -1,3 +1,7 @@
+#include "../config/InkAdsFeatures.h"
+
+#if INKADS_FEATURE_ENTRA
+
 #include "AdminSessionStore.h"
 
 #include "../config/EntraConfig.h"
@@ -101,3 +105,5 @@ bool AdminSessionStore::cookieValue(httpd_req_t* request, const char* name,
   out[index] = '\0';
   return index > 0;
 }
+
+#endif

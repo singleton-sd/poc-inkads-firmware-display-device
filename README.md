@@ -145,7 +145,7 @@ On boot, any leftover NVS `admin_pass` value from earlier firmware is deleted.
 Release automation runs on merges to `main` and does not open version-bump PRs.
 
 - Conventional Commits drive semantic versioning (`feat` -> minor, `fix/perf/refactor/revert` -> patch, breaking change -> major).
-- When a version bump is due, the release workflow updates `version.json` and `src/config/DeviceConfig.h`, prepends `CHANGELOG.md` using `git-cliff`, compiles that stamped tree once, tags `vX.Y.Z`, and attaches every `dist/*.bin` and `dist/*.json` to the GitHub Release.
+- When a version bump is due, the release workflow updates `version.json` and `src/config/DeviceConfig.h`, prepends `CHANGELOG.md` using `git-cliff`, compiles every `targets.json` row, tags `vX.Y.Z`, and attaches `inkads-{filename}-{suffix}-v{version}.bin`, `inkads-manifest.json`, and remaining `dist/*.bin` extras to the GitHub Release.
 - Unversioned pushes to `main` (`docs`, `ci`, `chore`, and similar) do not compile. Pull requests still compile in Firmware build.
 - To republish an existing tag, run Actions → Firmware release → Run workflow.
 
@@ -154,7 +154,13 @@ To keep release behavior predictable, use Conventional Commit titles for squash-
 ## Arduino IDE
 
 Open `display-device.ino`, select `MH ET LIVE ESP32MiniKit` (or `ESP32 Dev
-Module`), select an OTA-capable partition scheme, and upload.
+Module`), select an OTA-capable partition scheme, and upload. Local IDE
+builds use the committed defaults in `src/config/InkAdsFeatures.h`. CI
+overwrites that header per `targets.json` row before `arduino-cli compile`.
+
+New optional behaviour needs a catalog feature flag so each compile can
+include or drop it. Enable developed features on the `full` suffix; see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 For first-time bootstrap only, copy `src/config/TlsCredentials.local.example.h`
 to `src/config/TlsCredentials.local.h` and provision a device certificate whose

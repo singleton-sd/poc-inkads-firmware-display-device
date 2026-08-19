@@ -1,22 +1,29 @@
 #include "LocalWebServer.h"
 
+#include "../config/InkAdsFeatures.h"
+
+#include <WiFi.h>
+
+#include "../config/DeviceConfig.h"
+#include "../platform/DeviceIdentity.h"
+#include "pages/HomePage.h"
+#include "styles/DesignTokens.h"
+
+#if INKADS_FEATURE_HTTPS_ADMIN
 #include <cstring>
 #include <memory>
-#include <WiFi.h>
 #include <cJSON.h>
 #include <esp_https_server.h>
 
-#include "../config/DeviceConfig.h"
 #include "../config/DeviceSettings.h"
 #include "../config/EntraConfig.h"
 #include "../config/TlsCredentials.h"
 #include "../network/WifiScan.h"
-#include "../platform/DeviceIdentity.h"
 #include "pages/AdminPage.h"
-#include "pages/HomePage.h"
 #include "pages/SignInPage.h"
-#include "styles/DesignTokens.h"
+#endif
 
+#if INKADS_FEATURE_HTTPS_ADMIN
 namespace {
 String urlDecode(const char* encoded) {
   String decoded;
@@ -73,12 +80,14 @@ String readFormValue(const String& body, const char* key) {
   return urlDecode(value);
 }
 }  // namespace
+#endif
 
 LocalWebServer::LocalWebServer(ConfigStore& configStore)
     : configStore_(configStore) {}
 
 void LocalWebServer::begin() {
   httpServer_.on("/", HTTP_GET, [this]() { showHome(); });
+#if INKADS_FEATURE_HTTPS_ADMIN
   httpServer_.on("/admin", HTTP_GET, [this]() { refuseInsecureAdmin(); });
   httpServer_.on("/admin", HTTP_POST, [this]() { refuseInsecureAdmin(); });
   httpServer_.on("/admin/session", HTTP_GET, [this]() { refuseInsecureAdmin(); });
@@ -97,12 +106,14 @@ void LocalWebServer::begin() {
                  [this]() { refuseInsecureAdmin(); });
   httpServer_.on("/admin/reset", HTTP_POST,
                  [this]() { refuseInsecureAdmin(); });
+#endif
   httpServer_.onNotFound(
       [this]() { httpServer_.send(404, "text/plain", "Not found"); });
   httpServer_.begin();
 
   Serial.print("Local page: http://");
   Serial.println(WiFi.localIP());
+#if INKADS_FEATURE_HTTPS_ADMIN
   if (startHttpsServer()) {
     Serial.print("Secure admin page: https://");
     Serial.println(DeviceIdentity::dnsName() + "/admin");
@@ -111,11 +122,14 @@ void LocalWebServer::begin() {
   } else {
     Serial.println("Secure admin page unavailable; admin routes fail closed.");
   }
+#endif
 }
 
 void LocalWebServer::loop() {
   httpServer_.handleClient();
+#if INKADS_FEATURE_ENTRA
   entraAuth_.loop();
+#endif
 }
 
 void LocalWebServer::showHome() {
@@ -127,6 +141,7 @@ void LocalWebServer::showHome() {
   httpServer_.send(200, "text/html", page);
 }
 
+#if INKADS_FEATURE_HTTPS_ADMIN
 void LocalWebServer::refuseInsecureAdmin() {
   httpServer_.sendHeader("Cache-Control", "no-store");
   httpServer_.send(426, "text/plain",
@@ -199,7 +214,9 @@ bool LocalWebServer::startHttpsServer() {
          registerPost("/admin/session/cancel", handleHttpsSessionCancel) &&
          registerPost("/admin/logout", handleHttpsLogout) &&
          registerPost("/admin/tls-certificate", handleHttpsTlsCertificate) &&
+#if INKADS_FEATURE_OTA
          registerPost("/admin/update", handleHttpsUpdate) &&
+#endif
          registerGet("/networks", handleHttpsNetworks) &&
          registerPost("/admin/wifi", handleHttpsWifi) &&
          registerPost("/admin/reset", handleHttpsReset);
@@ -232,9 +249,11 @@ esp_err_t LocalWebServer::handleHttpsLogout(httpd_req_t* request) {
   return static_cast<LocalWebServer*>(request->user_ctx)->logoutHttps(request);
 }
 
+#if INKADS_FEATURE_OTA
 esp_err_t LocalWebServer::handleHttpsUpdate(httpd_req_t* request) {
   return static_cast<LocalWebServer*>(request->user_ctx)->updateHttps(request);
 }
+#endif
 
 esp_err_t LocalWebServer::handleHttpsTlsCertificate(httpd_req_t* request) {
   return static_cast<LocalWebServer*>(request->user_ctx)
@@ -377,12 +396,14 @@ esp_err_t LocalWebServer::logoutHttps(httpd_req_t* request) {
                   "{\"state\":\"idle\"}");
 }
 
+#if INKADS_FEATURE_OTA
 esp_err_t LocalWebServer::updateHttps(httpd_req_t* request) {
   if (!requireSessionCsrf(request)) return ESP_OK;
   entraAuth_.sessions().touch();
   entraAuth_.sessions().applySessionCookie(request);
   return otaUpdateService_.handleHttpsUpdate(request);
 }
+#endif
 
 esp_err_t LocalWebServer::updateTlsCertificate(httpd_req_t* request) {
   if (!requireSessionCsrf(request)) return ESP_OK;
@@ -537,3 +558,4 @@ esp_err_t LocalWebServer::sendText(httpd_req_t* request, const char* status,
   httpd_resp_set_type(request, type);
   return httpd_resp_send(request, body, HTTPD_RESP_USE_STRLEN);
 }
+#endif

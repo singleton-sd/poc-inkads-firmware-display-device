@@ -1,3 +1,7 @@
+#include "../config/InkAdsFeatures.h"
+
+#if INKADS_FEATURE_ENTRA
+
 #include "EntraAuthService.h"
 
 #include "../config/DeviceConfig.h"
@@ -58,3 +62,5 @@ void EntraAuthService::finishAuthorization() {
     Serial.println(ESP.getFreeHeap());
   }
 }
+
+#endif

@@ -23,6 +23,9 @@ jobs:
 
       - uses: arduino/setup-arduino-cli@v2
 
+      - name: Run catalog tests
+        run: bash scripts/test/run.sh
+
       - name: Resolve and validate version
         id: version
         env:
@@ -32,7 +35,7 @@ jobs:
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Compile release firmware
-        run: bash scripts/compile.sh
+        run: bash scripts/compile.sh --all
 
       - name: Stage release assets
         env:

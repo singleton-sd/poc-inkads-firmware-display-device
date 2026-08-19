@@ -1,0 +1,25 @@
+{
+  "features": ["wifi", "provisioning", "https_admin", "entra", "ota", "epaper"],
+  "boards": [
+    {
+      "id": "mhetesp32minikit",
+      "displayName": "MH-ET LIVE ESP32 MiniKit",
+      "fqbn": "esp32:esp32:mhetesp32minikit",
+      "filename": "mhetesp32minikit"
+    }
+  ],
+  "targets": [
+    {
+      "board": "mhetesp32minikit",
+      "partitionScheme": "default",
+      "features": ["wifi", "provisioning", "https_admin", "entra", "ota"],
+      "suffix": "full"
+    },
+    {
+      "board": "mhetesp32minikit",
+      "partitionScheme": "huge-app",
+      "features": ["wifi", "provisioning"],
+      "suffix": "full"
+    }
+  ]
+}
