@@ -1,8 +1,6 @@
 name: Firmware build
 
 on:
-  push:
-    branches: [master, main]
   pull_request:
   workflow_dispatch:
 
@@ -17,36 +15,15 @@ jobs:
 
       - uses: arduino/setup-arduino-cli@v2
 
-      - name: Install ESP32 platform
-        run: |
-          arduino-cli config init
-          arduino-cli config add board_manager.additional_urls \
-            https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          arduino-cli core update-index
-          arduino-cli core install esp32:esp32@3.3.11
-
       - name: Validate firmware version
         run: node scripts/check-firmware-version.mjs
 
       - name: Compile firmware
-        run: |
-          # Arduino CLI requires the folder name to match display-device.ino.
-          # GitHub Actions checks out into a folder named after the repository.
-          sketch_dir="${RUNNER_TEMP}/display-device"
-          mkdir -p "$sketch_dir" dist
-          rsync -a --exclude '.git' --exclude dist ./ "$sketch_dir/"
-          arduino-cli compile \
-            --fqbn esp32:esp32:mhetesp32minikit \
-            --output-dir "${GITHUB_WORKSPACE}/dist" \
-            "$sketch_dir"
+        run: bash scripts/compile.sh
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
           name: inkads-firmware
-          path: |
-            dist/display-device.ino.bin
-            dist/display-device.ino.merged.bin
-            dist/display-device.ino.bootloader.bin
-            dist/display-device.ino.partitions.bin
+          path: dist/*.bin
           if-no-files-found: error
