@@ -19,5 +19,5 @@ constexpr char deviceDnsZone[] = "devices.singletonsd.com";
 constexpr char otaManifestUrl[] =
     "https://github.com/singleton-sd/poc-inkads-firmware-display-device/releases/latest/download/inkads-manifest.json";
 constexpr uint32_t otaHttpTimeoutMs = 30000;
-constexpr char firmwareVersion[] = "1.0.0";  // x-release-please-version
+constexpr char firmwareVersion[] = "1.1.0";  // x-release-please-version
 }  // namespace DeviceConfig

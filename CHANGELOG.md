@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.1.0 - 2026-08-23
+[Full Changelog](https://github.com/singleton-sd/poc-inkads-firmware-display-device/compare/v1.0.0...v1.1.0)
+
+
+
+### Features
+
+- Check and install firmware updates from GitHub releases [POC-249] (#20) (e43e0cc)
+
+
+### Documentation
+
+- Remove worktree when closing ClickUp ticket [POC-251] (#19) (9a0991b)
+
 ## v1.0.0 - 2026-08-19
 [Full Changelog](https://github.com/singleton-sd/poc-inkads-firmware-display-device/compare/v0.5.0...v1.0.0)
 
