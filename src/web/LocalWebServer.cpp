@@ -15,6 +15,9 @@
 #include <cJSON.h>
 #include <esp_https_server.h>
 
+#if INKADS_FEATURE_OTA
+#include <freertos/semphr.h>
+#endif
 #include "../config/DeviceSettings.h"
 #include "../config/EntraConfig.h"
 #include "../config/TlsCredentials.h"
@@ -83,7 +86,11 @@ String readFormValue(const String& body, const char* key) {
 #endif
 
 LocalWebServer::LocalWebServer(ConfigStore& configStore)
-    : configStore_(configStore) {}
+    : configStore_(configStore) {
+#if INKADS_FEATURE_OTA
+  releaseInstallMutex_ = xSemaphoreCreateMutex();
+#endif
+}
 
 void LocalWebServer::begin() {
   httpServer_.on("/", HTTP_GET, [this]() { showHome(); });
@@ -100,6 +107,12 @@ void LocalWebServer::begin() {
   httpServer_.on("/admin/tls-certificate", HTTP_POST,
                  [this]() { refuseInsecureAdmin(); });
   httpServer_.on("/admin/update", HTTP_POST,
+                 [this]() { refuseInsecureAdmin(); });
+  httpServer_.on("/admin/ota/check", HTTP_POST,
+                 [this]() { refuseInsecureAdmin(); });
+  httpServer_.on("/admin/ota/install", HTTP_POST,
+                 [this]() { refuseInsecureAdmin(); });
+  httpServer_.on("/admin/ota/status", HTTP_GET,
                  [this]() { refuseInsecureAdmin(); });
   httpServer_.on("/networks", HTTP_GET, [this]() { refuseInsecureAdmin(); });
   httpServer_.on("/admin/wifi", HTTP_POST,
@@ -216,6 +229,9 @@ bool LocalWebServer::startHttpsServer() {
          registerPost("/admin/tls-certificate", handleHttpsTlsCertificate) &&
 #if INKADS_FEATURE_OTA
          registerPost("/admin/update", handleHttpsUpdate) &&
+         registerPost("/admin/ota/check", handleHttpsOtaCheck) &&
+         registerPost("/admin/ota/install", handleHttpsOtaInstall) &&
+         registerGet("/admin/ota/status", handleHttpsOtaStatus) &&
 #endif
          registerGet("/networks", handleHttpsNetworks) &&
          registerPost("/admin/wifi", handleHttpsWifi) &&
@@ -252,6 +268,19 @@ esp_err_t LocalWebServer::handleHttpsLogout(httpd_req_t* request) {
 #if INKADS_FEATURE_OTA
 esp_err_t LocalWebServer::handleHttpsUpdate(httpd_req_t* request) {
   return static_cast<LocalWebServer*>(request->user_ctx)->updateHttps(request);
+}
+
+esp_err_t LocalWebServer::handleHttpsOtaCheck(httpd_req_t* request) {
+  return static_cast<LocalWebServer*>(request->user_ctx)->checkOtaHttps(request);
+}
+
+esp_err_t LocalWebServer::handleHttpsOtaInstall(httpd_req_t* request) {
+  return static_cast<LocalWebServer*>(request->user_ctx)->installOtaHttps(request);
+}
+
+esp_err_t LocalWebServer::handleHttpsOtaStatus(httpd_req_t* request) {
+  return static_cast<LocalWebServer*>(request->user_ctx)
+      ->otaInstallStatusHttps(request);
 }
 #endif
 
@@ -291,6 +320,7 @@ esp_err_t LocalWebServer::sendHttpsAdmin(httpd_req_t* request) {
     String page = FPSTR(ADMIN_PAGE);
     page.replace("{{DESIGN_TOKENS}}", FPSTR(DESIGN_TOKENS_CSS));
     page.replace("{{VERSION}}", DeviceConfig::firmwareVersion);
+    page.replace("{{TARGET_ID}}", INKADS_TARGET_ID);
     page.replace("{{IP}}", WiFi.localIP().toString());
     const String connectedSsid = WiFi.SSID();
     page.replace("{{SSID}}", connectedSsid.isEmpty() ? "(unknown)" : connectedSsid);
@@ -402,6 +432,209 @@ esp_err_t LocalWebServer::updateHttps(httpd_req_t* request) {
   entraAuth_.sessions().touch();
   entraAuth_.sessions().applySessionCookie(request);
   return otaUpdateService_.handleHttpsUpdate(request);
+}
+
+esp_err_t LocalWebServer::checkOtaHttps(httpd_req_t* request) {
+  drainBody(request);
+  if (!requireSessionCsrf(request)) return ESP_OK;
+  entraAuth_.sessions().touch();
+  entraAuth_.sessions().applySessionCookie(request);
+
+  OtaCheckResult result;
+  otaUpdateService_.checkReleaseUpdate(DeviceConfig::otaManifestUrl, result);
+
+  cJSON* json = cJSON_CreateObject();
+  if (json == nullptr) {
+    return sendText(request, "500 Internal Server Error", "application/json",
+                    "{\"success\":false,\"message\":\"Response build failed\"}");
+  }
+  if (cJSON_AddBoolToObject(json, "success", result.success) == nullptr ||
+      cJSON_AddBoolToObject(json, "update_available",
+                            result.updateAvailable) == nullptr ||
+      cJSON_AddStringToObject(json, "available_version",
+                              result.availableVersion.c_str()) == nullptr ||
+      cJSON_AddStringToObject(json, "message", result.message.c_str()) ==
+          nullptr) {
+    cJSON_Delete(json);
+    return sendText(request, "500 Internal Server Error", "application/json",
+                    "{\"success\":false,\"message\":\"Response build failed\"}");
+  }
+
+  char* body = cJSON_PrintUnformatted(json);
+  cJSON_Delete(json);
+  if (body == nullptr) {
+    return sendText(request, "500 Internal Server Error", "application/json",
+                    "{\"success\":false,\"message\":\"Response build failed\"}");
+  }
+
+  httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+  httpd_resp_set_type(request, "application/json");
+  const esp_err_t status = httpd_resp_send(request, body, strlen(body));
+  cJSON_free(body);
+  return status;
+}
+
+void LocalWebServer::setReleaseInstallStatus(ReleaseInstallState state,
+                                             const char* message) {
+  if (releaseInstallMutex_ == nullptr ||
+      xSemaphoreTake(releaseInstallMutex_, portMAX_DELAY) != pdTRUE) {
+    return;
+  }
+  releaseInstallState_ = state;
+  if (message == nullptr) message = "";
+  strncpy(releaseInstallMessage_, message, sizeof(releaseInstallMessage_) - 1);
+  releaseInstallMessage_[sizeof(releaseInstallMessage_) - 1] = '\0';
+  xSemaphoreGive(releaseInstallMutex_);
+}
+
+void LocalWebServer::copyReleaseInstallStatus(ReleaseInstallState& state,
+                                              char* message,
+                                              size_t messageLen) {
+  if (message == nullptr || messageLen == 0) return;
+  message[0] = '\0';
+  state = ReleaseInstallState::Idle;
+  if (releaseInstallMutex_ == nullptr ||
+      xSemaphoreTake(releaseInstallMutex_, portMAX_DELAY) != pdTRUE) {
+    return;
+  }
+  state = releaseInstallState_;
+  strncpy(message, releaseInstallMessage_, messageLen - 1);
+  message[messageLen - 1] = '\0';
+  xSemaphoreGive(releaseInstallMutex_);
+}
+
+void LocalWebServer::releaseInstallTask(void* arg) {
+  auto* self = static_cast<LocalWebServer*>(arg);
+  String error;
+  const bool ok = self->otaUpdateService_.installReleaseUpdate(
+      self->releaseInstallUrl_, self->releaseInstallSha256_,
+      self->releaseInstallSize_, error);
+  if (!ok) {
+    self->setReleaseInstallStatus(
+        ReleaseInstallState::Failed,
+        error.isEmpty() ? "OTA installation failed" : error.c_str());
+    vTaskDelete(nullptr);
+    return;
+  }
+
+  self->setReleaseInstallStatus(ReleaseInstallState::Succeeded,
+                              "Update installed. Restarting...");
+  delay(DeviceConfig::restartDelayMs);
+  ESP.restart();
+}
+
+esp_err_t LocalWebServer::installOtaHttps(httpd_req_t* request) {
+  if (!requireSessionCsrf(request)) return ESP_OK;
+  entraAuth_.sessions().touch();
+  entraAuth_.sessions().applySessionCookie(request);
+
+  drainBody(request);
+
+  if (releaseInstallMutex_ == nullptr) {
+    return sendText(request, "500 Internal Server Error", "text/plain",
+                    "OTA install unavailable");
+  }
+
+  OtaCheckResult check;
+  if (!otaUpdateService_.checkReleaseUpdate(DeviceConfig::otaManifestUrl,
+                                            check) ||
+      !check.updateAvailable || !check.targetFound ||
+      check.downloadUrl.isEmpty() || check.sha256.isEmpty()) {
+    const String msg = check.message.isEmpty()
+                           ? "No installable update is available"
+                           : check.message;
+    return sendText(request, "400 Bad Request", "text/plain", msg.c_str());
+  }
+
+  if (check.downloadUrl.length() >= sizeof(releaseInstallUrl_) ||
+      check.sha256.length() >= sizeof(releaseInstallSha256_)) {
+    return sendText(request, "500 Internal Server Error", "text/plain",
+                    "Update metadata is too large");
+  }
+
+  if (xSemaphoreTake(releaseInstallMutex_, portMAX_DELAY) != pdTRUE) {
+    return sendText(request, "500 Internal Server Error", "text/plain",
+                    "OTA install unavailable");
+  }
+  if (releaseInstallState_ == ReleaseInstallState::Running) {
+    xSemaphoreGive(releaseInstallMutex_);
+    return sendText(request, "409 Conflict", "text/plain",
+                    "An OTA installation is already in progress");
+  }
+
+  strncpy(releaseInstallUrl_, check.downloadUrl.c_str(),
+          sizeof(releaseInstallUrl_) - 1);
+  releaseInstallUrl_[sizeof(releaseInstallUrl_) - 1] = '\0';
+  strncpy(releaseInstallSha256_, check.sha256.c_str(),
+          sizeof(releaseInstallSha256_) - 1);
+  releaseInstallSha256_[sizeof(releaseInstallSha256_) - 1] = '\0';
+  releaseInstallSize_ = check.size;
+  releaseInstallState_ = ReleaseInstallState::Running;
+  strncpy(releaseInstallMessage_, "Installing update...",
+          sizeof(releaseInstallMessage_) - 1);
+  releaseInstallMessage_[sizeof(releaseInstallMessage_) - 1] = '\0';
+  xSemaphoreGive(releaseInstallMutex_);
+
+  const BaseType_t created =
+      xTaskCreate(releaseInstallTask, "ota_install", 12288, this, 5, nullptr);
+  if (created != pdPASS) {
+    setReleaseInstallStatus(ReleaseInstallState::Failed,
+                            "Could not start OTA install task");
+    return sendText(request, "500 Internal Server Error", "text/plain",
+                    "Could not start OTA install task");
+  }
+
+  return sendText(request, "202 Accepted", "text/plain",
+                  "OTA installation started");
+}
+
+esp_err_t LocalWebServer::otaInstallStatusHttps(httpd_req_t* request) {
+  if (!requireSession(request)) return ESP_OK;
+  entraAuth_.sessions().touch();
+  entraAuth_.sessions().applySessionCookie(request);
+
+  ReleaseInstallState installState = ReleaseInstallState::Idle;
+  char installMessage[sizeof(releaseInstallMessage_)] = {};
+  copyReleaseInstallStatus(installState, installMessage, sizeof(installMessage));
+
+  const char* state = "idle";
+  switch (installState) {
+    case ReleaseInstallState::Running:
+      state = "running";
+      break;
+    case ReleaseInstallState::Succeeded:
+      state = "succeeded";
+      break;
+    case ReleaseInstallState::Failed:
+      state = "failed";
+      break;
+    case ReleaseInstallState::Idle:
+    default:
+      state = "idle";
+      break;
+  }
+
+  cJSON* json = cJSON_CreateObject();
+  if (json == nullptr ||
+      cJSON_AddStringToObject(json, "state", state) == nullptr ||
+      cJSON_AddStringToObject(json, "message", installMessage) == nullptr) {
+    cJSON_Delete(json);
+    return sendText(request, "500 Internal Server Error", "application/json",
+                    "{\"state\":\"failed\",\"message\":\"Status build failed\"}");
+  }
+
+  char* body = cJSON_PrintUnformatted(json);
+  cJSON_Delete(json);
+  if (body == nullptr) {
+    return sendText(request, "500 Internal Server Error", "application/json",
+                    "{\"state\":\"failed\",\"message\":\"Status build failed\"}");
+  }
+
+  httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+  httpd_resp_set_type(request, "application/json");
+  const esp_err_t status = httpd_resp_send(request, body, strlen(body));
+  cJSON_free(body);
+  return status;
 }
 #endif
 

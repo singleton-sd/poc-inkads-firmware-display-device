@@ -12,6 +12,7 @@
 #include "../config/TlsCertificateStore.h"
 #endif
 #if INKADS_FEATURE_OTA
+#include <freertos/semphr.h>
 #include "../update/OtaUpdateService.h"
 #endif
 
@@ -33,6 +34,9 @@ class LocalWebServer {
   static esp_err_t handleHttpsLogout(httpd_req_t* request);
   static esp_err_t handleHttpsTlsCertificate(httpd_req_t* request);
   static esp_err_t handleHttpsUpdate(httpd_req_t* request);
+  static esp_err_t handleHttpsOtaCheck(httpd_req_t* request);
+  static esp_err_t handleHttpsOtaInstall(httpd_req_t* request);
+  static esp_err_t handleHttpsOtaStatus(httpd_req_t* request);
   static esp_err_t handleHttpsNetworks(httpd_req_t* request);
   static esp_err_t handleHttpsWifi(httpd_req_t* request);
   static esp_err_t handleHttpsReset(httpd_req_t* request);
@@ -44,6 +48,9 @@ class LocalWebServer {
   esp_err_t logoutHttps(httpd_req_t* request);
   esp_err_t updateTlsCertificate(httpd_req_t* request);
   esp_err_t updateHttps(httpd_req_t* request);
+  esp_err_t checkOtaHttps(httpd_req_t* request);
+  esp_err_t installOtaHttps(httpd_req_t* request);
+  esp_err_t otaInstallStatusHttps(httpd_req_t* request);
   esp_err_t sendHttpsNetworks(httpd_req_t* request);
   esp_err_t updateWifiHttps(httpd_req_t* request);
   esp_err_t resetHttps(httpd_req_t* request);
@@ -60,7 +67,23 @@ class LocalWebServer {
   WebServer httpServer_{80};
   httpd_handle_t httpsServer_ = nullptr;
 #if INKADS_FEATURE_OTA
+  enum class ReleaseInstallState : uint8_t {
+    Idle = 0,
+    Running,
+    Succeeded,
+    Failed
+  };
+  static void releaseInstallTask(void* arg);
+  void setReleaseInstallStatus(ReleaseInstallState state, const char* message);
+  void copyReleaseInstallStatus(ReleaseInstallState& state, char* message,
+                                size_t messageLen);
   OtaUpdateService otaUpdateService_;
+  SemaphoreHandle_t releaseInstallMutex_ = nullptr;
+  ReleaseInstallState releaseInstallState_ = ReleaseInstallState::Idle;
+  char releaseInstallMessage_[96] = {};
+  char releaseInstallUrl_[256] = {};
+  char releaseInstallSha256_[65] = {};
+  size_t releaseInstallSize_ = 0;
 #endif
 #if INKADS_FEATURE_ENTRA
   EntraAuthService entraAuth_;

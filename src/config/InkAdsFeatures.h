@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef INKADS_TARGET_ID
-#define INKADS_TARGET_ID mhetesp32minikit-full
+#define INKADS_TARGET_ID "mhetesp32minikit-full"
 #endif
 
 #ifndef INKADS_FEATURE_WIFI

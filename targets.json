@@ -18,7 +18,7 @@
   "targets": [
     {
       "board": "mhetesp32minikit",
-      "partitionScheme": "default",
+      "partitionScheme": "min_spiffs",
       "features": [
         "wifi",
         "provisioning",
