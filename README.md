@@ -118,9 +118,10 @@ The firmware can check for and download released firmware binaries directly from
 
 1. In the admin page, click **Check for release update** (or call `POST /admin/ota/check`).
 2. The device fetches `inkads-manifest.json` from the repository releases via HTTPS (`DeviceConfig::otaManifestUrl`), parses the target list, and compares the released semantic version with `DeviceConfig::firmwareVersion`.
-3. If an update matching the board target (`INKADS_TARGET_ID`) is found and is newer, click **Install release update** (or call `POST /admin/ota/install`).
-4. The device streams the `.bin` image directly into the inactive OTA partition, verifies the SHA-256 checksum and download size, and restarts into the updated firmware upon successful validation.
-5. Manual `.bin` upload via `POST /admin/update` is retained as an offline/recovery fallback.
+3. If an update matching the board target (`INKADS_TARGET_ID`) is found and is newer, click **Install update** (or call `POST /admin/ota/install`).
+4. Install returns `202 Accepted` and runs in a background task so the admin HTTPS server stays responsive. Poll `GET /admin/ota/status` for `running` / `succeeded` / `failed`.
+5. The device streams the `.bin` image into the inactive OTA partition, verifies SHA-256 and size, then restarts after a successful install.
+6. Manual `.bin` upload via `POST /admin/update` is retained as an offline/recovery fallback.
 
 ### Physical recovery
 

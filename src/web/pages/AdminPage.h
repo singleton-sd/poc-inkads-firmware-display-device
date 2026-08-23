@@ -212,22 +212,29 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
       otaInstallBtn.addEventListener('click',async()=>{
         if(!otaVersion)return;
         if(!window.confirm('Install v'+otaVersion+' and restart?'))return;
-        otaReleaseStatus.textContent='Installing update... Keep power connected.';
+        otaReleaseStatus.textContent='Starting installation... Keep power connected.';
         otaInstallBtn.disabled=true;
         otaCheckBtn.disabled=true;
+        const unlock=()=>{otaInstallBtn.disabled=false;otaCheckBtn.disabled=false;};
         try{
           const response=await fetch('/admin/ota/install',{method:'POST',credentials:'same-origin',
             headers:{'X-CSRF-Token':csrf}});
-          otaReleaseStatus.textContent=await response.text();
-          if(response.status===401||response.status===403)location.reload();
-          else if(!response.ok){
-            otaInstallBtn.disabled=false;
-            otaCheckBtn.disabled=false;
+          const text=await response.text();
+          otaReleaseStatus.textContent=text;
+          if(response.status===401||response.status===403){location.reload();return;}
+          if(response.status!==202){unlock();return;}
+          for(;;){
+            await new Promise(r=>setTimeout(r,1500));
+            const statusResponse=await fetch('/admin/ota/status',{credentials:'same-origin'});
+            if(statusResponse.status===401||statusResponse.status===403){location.reload();return;}
+            const status=await statusResponse.json();
+            otaReleaseStatus.textContent=status.message||status.state||'Installing...';
+            if(status.state==='succeeded')return;
+            if(status.state==='failed'||status.state==='idle'){unlock();return;}
           }
         }catch(error){
           otaReleaseStatus.textContent='Installation failed.';
-          otaInstallBtn.disabled=false;
-          otaCheckBtn.disabled=false;
+          unlock();
         }
       });
     }
