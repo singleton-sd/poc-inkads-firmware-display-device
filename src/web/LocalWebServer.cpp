@@ -15,6 +15,9 @@
 #include <cJSON.h>
 #include <esp_https_server.h>
 
+#if INKADS_FEATURE_OTA
+#include <freertos/semphr.h>
+#endif
 #include "../config/DeviceSettings.h"
 #include "../config/EntraConfig.h"
 #include "../config/TlsCredentials.h"
@@ -83,7 +86,11 @@ String readFormValue(const String& body, const char* key) {
 #endif
 
 LocalWebServer::LocalWebServer(ConfigStore& configStore)
-    : configStore_(configStore) {}
+    : configStore_(configStore) {
+#if INKADS_FEATURE_OTA
+  releaseInstallMutex_ = xSemaphoreCreateMutex();
+#endif
+}
 
 void LocalWebServer::begin() {
   httpServer_.on("/", HTTP_GET, [this]() { showHome(); });
@@ -467,10 +474,33 @@ esp_err_t LocalWebServer::checkOtaHttps(httpd_req_t* request) {
   return status;
 }
 
-void LocalWebServer::setReleaseInstallMessage(const char* message) {
+void LocalWebServer::setReleaseInstallStatus(ReleaseInstallState state,
+                                             const char* message) {
+  if (releaseInstallMutex_ == nullptr ||
+      xSemaphoreTake(releaseInstallMutex_, portMAX_DELAY) != pdTRUE) {
+    return;
+  }
+  releaseInstallState_ = state;
   if (message == nullptr) message = "";
   strncpy(releaseInstallMessage_, message, sizeof(releaseInstallMessage_) - 1);
   releaseInstallMessage_[sizeof(releaseInstallMessage_) - 1] = '\0';
+  xSemaphoreGive(releaseInstallMutex_);
+}
+
+void LocalWebServer::copyReleaseInstallStatus(ReleaseInstallState& state,
+                                              char* message,
+                                              size_t messageLen) {
+  if (message == nullptr || messageLen == 0) return;
+  message[0] = '\0';
+  state = ReleaseInstallState::Idle;
+  if (releaseInstallMutex_ == nullptr ||
+      xSemaphoreTake(releaseInstallMutex_, portMAX_DELAY) != pdTRUE) {
+    return;
+  }
+  state = releaseInstallState_;
+  strncpy(message, releaseInstallMessage_, messageLen - 1);
+  message[messageLen - 1] = '\0';
+  xSemaphoreGive(releaseInstallMutex_);
 }
 
 void LocalWebServer::releaseInstallTask(void* arg) {
@@ -480,15 +510,15 @@ void LocalWebServer::releaseInstallTask(void* arg) {
       self->releaseInstallUrl_, self->releaseInstallSha256_,
       self->releaseInstallSize_, error);
   if (!ok) {
-    self->setReleaseInstallMessage(
+    self->setReleaseInstallStatus(
+        ReleaseInstallState::Failed,
         error.isEmpty() ? "OTA installation failed" : error.c_str());
-    self->releaseInstallState_ = ReleaseInstallState::Failed;
     vTaskDelete(nullptr);
     return;
   }
 
-  self->setReleaseInstallMessage("Update installed. Restarting...");
-  self->releaseInstallState_ = ReleaseInstallState::Succeeded;
+  self->setReleaseInstallStatus(ReleaseInstallState::Succeeded,
+                              "Update installed. Restarting...");
   delay(DeviceConfig::restartDelayMs);
   ESP.restart();
 }
@@ -500,9 +530,9 @@ esp_err_t LocalWebServer::installOtaHttps(httpd_req_t* request) {
 
   drainBody(request);
 
-  if (releaseInstallState_ == ReleaseInstallState::Running) {
-    return sendText(request, "409 Conflict", "text/plain",
-                    "An OTA installation is already in progress");
+  if (releaseInstallMutex_ == nullptr) {
+    return sendText(request, "500 Internal Server Error", "text/plain",
+                    "OTA install unavailable");
   }
 
   OtaCheckResult check;
@@ -522,6 +552,16 @@ esp_err_t LocalWebServer::installOtaHttps(httpd_req_t* request) {
                     "Update metadata is too large");
   }
 
+  if (xSemaphoreTake(releaseInstallMutex_, portMAX_DELAY) != pdTRUE) {
+    return sendText(request, "500 Internal Server Error", "text/plain",
+                    "OTA install unavailable");
+  }
+  if (releaseInstallState_ == ReleaseInstallState::Running) {
+    xSemaphoreGive(releaseInstallMutex_);
+    return sendText(request, "409 Conflict", "text/plain",
+                    "An OTA installation is already in progress");
+  }
+
   strncpy(releaseInstallUrl_, check.downloadUrl.c_str(),
           sizeof(releaseInstallUrl_) - 1);
   releaseInstallUrl_[sizeof(releaseInstallUrl_) - 1] = '\0';
@@ -529,16 +569,19 @@ esp_err_t LocalWebServer::installOtaHttps(httpd_req_t* request) {
           sizeof(releaseInstallSha256_) - 1);
   releaseInstallSha256_[sizeof(releaseInstallSha256_) - 1] = '\0';
   releaseInstallSize_ = check.size;
-  setReleaseInstallMessage("Installing update...");
   releaseInstallState_ = ReleaseInstallState::Running;
+  strncpy(releaseInstallMessage_, "Installing update...",
+          sizeof(releaseInstallMessage_) - 1);
+  releaseInstallMessage_[sizeof(releaseInstallMessage_) - 1] = '\0';
+  xSemaphoreGive(releaseInstallMutex_);
 
   const BaseType_t created =
       xTaskCreate(releaseInstallTask, "ota_install", 12288, this, 5, nullptr);
   if (created != pdPASS) {
-    releaseInstallState_ = ReleaseInstallState::Failed;
-    setReleaseInstallMessage("Could not start OTA install task");
+    setReleaseInstallStatus(ReleaseInstallState::Failed,
+                            "Could not start OTA install task");
     return sendText(request, "500 Internal Server Error", "text/plain",
-                    releaseInstallMessage_);
+                    "Could not start OTA install task");
   }
 
   return sendText(request, "202 Accepted", "text/plain",
@@ -550,8 +593,12 @@ esp_err_t LocalWebServer::otaInstallStatusHttps(httpd_req_t* request) {
   entraAuth_.sessions().touch();
   entraAuth_.sessions().applySessionCookie(request);
 
+  ReleaseInstallState installState = ReleaseInstallState::Idle;
+  char installMessage[sizeof(releaseInstallMessage_)] = {};
+  copyReleaseInstallStatus(installState, installMessage, sizeof(installMessage));
+
   const char* state = "idle";
-  switch (releaseInstallState_) {
+  switch (installState) {
     case ReleaseInstallState::Running:
       state = "running";
       break;
@@ -570,8 +617,7 @@ esp_err_t LocalWebServer::otaInstallStatusHttps(httpd_req_t* request) {
   cJSON* json = cJSON_CreateObject();
   if (json == nullptr ||
       cJSON_AddStringToObject(json, "state", state) == nullptr ||
-      cJSON_AddStringToObject(json, "message", releaseInstallMessage_) ==
-          nullptr) {
+      cJSON_AddStringToObject(json, "message", installMessage) == nullptr) {
     cJSON_Delete(json);
     return sendText(request, "500 Internal Server Error", "application/json",
                     "{\"state\":\"failed\",\"message\":\"Status build failed\"}");

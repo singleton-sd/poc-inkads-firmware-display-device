@@ -12,6 +12,7 @@
 #include "../config/TlsCertificateStore.h"
 #endif
 #if INKADS_FEATURE_OTA
+#include <freertos/semphr.h>
 #include "../update/OtaUpdateService.h"
 #endif
 
@@ -61,10 +62,6 @@ class LocalWebServer {
                      const char* body);
   bool registerGet(const char* uri, esp_err_t (*handler)(httpd_req_t*));
   bool registerPost(const char* uri, esp_err_t (*handler)(httpd_req_t*));
-#if INKADS_FEATURE_OTA
-  static void releaseInstallTask(void* arg);
-  void setReleaseInstallMessage(const char* message);
-#endif
 
   ConfigStore& configStore_;
   WebServer httpServer_{80};
@@ -76,8 +73,13 @@ class LocalWebServer {
     Succeeded,
     Failed
   };
+  static void releaseInstallTask(void* arg);
+  void setReleaseInstallStatus(ReleaseInstallState state, const char* message);
+  void copyReleaseInstallStatus(ReleaseInstallState& state, char* message,
+                                size_t messageLen);
   OtaUpdateService otaUpdateService_;
-  volatile ReleaseInstallState releaseInstallState_ = ReleaseInstallState::Idle;
+  SemaphoreHandle_t releaseInstallMutex_ = nullptr;
+  ReleaseInstallState releaseInstallState_ = ReleaseInstallState::Idle;
   char releaseInstallMessage_[96] = {};
   char releaseInstallUrl_[256] = {};
   char releaseInstallSha256_[65] = {};
