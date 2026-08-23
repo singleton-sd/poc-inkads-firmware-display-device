@@ -429,28 +429,14 @@ esp_err_t LocalWebServer::checkOtaHttps(httpd_req_t* request) {
   otaUpdateService_.checkReleaseUpdate(DeviceConfig::otaManifestUrl, result);
 
   String body;
-  body.reserve(512);
+  body.reserve(192);
   body += "{\"success\":";
   body += result.success ? "true" : "false";
-  body += ",\"current_version\":\"";
-  body += result.currentVersion;
-  body += "\",\"target_id\":\"";
-  body += result.targetId;
-  body += "\",\"available_version\":\"";
-  body += result.availableVersion;
-  body += "\",\"channel\":\"";
-  body += result.channel;
-  body += "\",\"update_available\":";
+  body += ",\"update_available\":";
   body += result.updateAvailable ? "true" : "false";
-  body += ",\"target_found\":";
-  body += result.targetFound ? "true" : "false";
-  body += ",\"download_url\":\"";
-  body += result.downloadUrl;
-  body += "\",\"sha256\":\"";
-  body += result.sha256;
-  body += "\",\"size\":";
-  body += String(result.size);
-  body += ",\"message\":\"";
+  body += ",\"available_version\":\"";
+  body += result.availableVersion;
+  body += "\",\"message\":\"";
   body += result.message;
   body += "\"}";
 
@@ -464,51 +450,22 @@ esp_err_t LocalWebServer::installOtaHttps(httpd_req_t* request) {
   entraAuth_.sessions().touch();
   entraAuth_.sessions().applySessionCookie(request);
 
-  String body;
-  readRequestBody(request, body);
+  drainBody(request);
 
-  String downloadUrl;
-  String expectedSha256;
-  size_t expectedSize = 0;
-
-  if (!body.isEmpty()) {
-    cJSON* json = cJSON_Parse(body.c_str());
-    if (json != nullptr) {
-      const cJSON* urlItem =
-          cJSON_GetObjectItemCaseSensitive(json, "download_url");
-      const cJSON* shaItem = cJSON_GetObjectItemCaseSensitive(json, "sha256");
-      const cJSON* sizeItem = cJSON_GetObjectItemCaseSensitive(json, "size");
-      if (cJSON_IsString(urlItem) && urlItem->valuestring != nullptr) {
-        downloadUrl = urlItem->valuestring;
-      }
-      if (cJSON_IsString(shaItem) && shaItem->valuestring != nullptr) {
-        expectedSha256 = shaItem->valuestring;
-      }
-      if (cJSON_IsNumber(sizeItem)) {
-        expectedSize = static_cast<size_t>(sizeItem->valueint);
-      }
-      cJSON_Delete(json);
-    }
-  }
-
-  if (downloadUrl.isEmpty()) {
-    OtaCheckResult check;
-    if (!otaUpdateService_.checkReleaseUpdate(DeviceConfig::otaManifestUrl,
+  OtaCheckResult check;
+  if (!otaUpdateService_.checkReleaseUpdate(DeviceConfig::otaManifestUrl,
                                             check) ||
-        !check.targetFound || check.downloadUrl.isEmpty()) {
-      const String msg = check.message.isEmpty()
-                             ? "Could not find firmware download URL for target"
-                             : check.message;
-      return sendText(request, "400 Bad Request", "text/plain", msg.c_str());
-    }
-    downloadUrl = check.downloadUrl;
-    expectedSha256 = check.sha256;
-    expectedSize = check.size;
+      !check.updateAvailable || !check.targetFound ||
+      check.downloadUrl.isEmpty() || check.sha256.isEmpty()) {
+    const String msg = check.message.isEmpty()
+                           ? "No installable update is available"
+                           : check.message;
+    return sendText(request, "400 Bad Request", "text/plain", msg.c_str());
   }
 
   String error;
   if (!otaUpdateService_.installReleaseUpdate(
-          downloadUrl.c_str(), expectedSha256.c_str(), expectedSize, error)) {
+          check.downloadUrl.c_str(), check.sha256.c_str(), check.size, error)) {
     const String msg = "OTA installation failed: " + error;
     return sendText(request, "500 Internal Server Error", "text/plain",
                     msg.c_str());

@@ -12,92 +12,31 @@
 #include <Update.h>
 
 #include "../auth/CryptoUtil.h"
+#if INKADS_FEATURE_ENTRA
+#include "../auth/EntraHttpsClient.h"
+#endif
 #include "../config/DeviceConfig.h"
 
 namespace {
-struct DownloadStreamContext {
-  size_t expectedSize = 0;
-  String expectedSha256;
-  size_t bytesReceived = 0;
-  bool updateStarted = false;
-  bool failed = false;
-  String errorMessage;
-  mbedtls_sha256_context shaCtx;
-};
+constexpr size_t kManifestBufferSize = 1024;
+constexpr size_t kDownloadBufferSize = 512;
 
-esp_err_t otaDownloadEvent(esp_http_client_event_t* evt) {
-  auto* ctx = static_cast<DownloadStreamContext*>(evt->user_data);
-  if (ctx == nullptr) return ESP_OK;
-
-  switch (evt->event_id) {
-    case HTTP_EVENT_ON_DATA: {
-      const int statusCode = esp_http_client_get_status_code(evt->client);
-      if (statusCode != 200) {
-        return ESP_OK;
-      }
-      if (evt->data_len <= 0) return ESP_OK;
-
-      if (!ctx->updateStarted) {
-        const int contentLength = esp_http_client_get_content_length(evt->client);
-        size_t updateSize = (contentLength > 0)
-                                ? static_cast<size_t>(contentLength)
-                                : ctx->expectedSize;
-        if (updateSize == 0) updateSize = UPDATE_SIZE_UNKNOWN;
-        if (!Update.begin(updateSize)) {
-          ctx->failed = true;
-          ctx->errorMessage = "Update.begin failed (storage partition error)";
-          Update.printError(Serial);
-          return ESP_FAIL;
-        }
-        mbedtls_sha256_init(&ctx->shaCtx);
-        mbedtls_sha256_starts(&ctx->shaCtx, 0);
-        ctx->updateStarted = true;
-      }
-
-      if (Update.write(reinterpret_cast<uint8_t*>(evt->data), evt->data_len) !=
-          static_cast<size_t>(evt->data_len)) {
-        ctx->failed = true;
-        ctx->errorMessage = "Update.write failed during stream";
-        Update.printError(Serial);
-        Update.abort();
-        return ESP_FAIL;
-      }
-
-      mbedtls_sha256_update(&ctx->shaCtx,
-                            reinterpret_cast<const unsigned char*>(evt->data),
-                            evt->data_len);
-      ctx->bytesReceived += evt->data_len;
-      break;
-    }
-    default:
-      break;
+bool fetchManifestBody(const char* manifestUrl, char* body, size_t bodySize,
+                       int* statusCode) {
+#if INKADS_FEATURE_ENTRA
+  size_t bodyLength = 0;
+  EntraHttpsClient https;
+  if (!https.get(manifestUrl, body, bodySize, &bodyLength, statusCode)) {
+    return false;
   }
-  return ESP_OK;
-}
-}  // namespace
-
-namespace {
-struct ManifestCapture {
-  char* data = nullptr;
-  size_t capacity = 0;
-  size_t length = 0;
-  bool overflowed = false;
-};
-
-esp_err_t manifestCaptureEvent(esp_http_client_event_t* event) {
-  if (event->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
-  auto* cap = static_cast<ManifestCapture*>(event->user_data);
-  if (cap == nullptr || event->data == nullptr || event->data_len <= 0) {
-    return ESP_OK;
-  }
-  if (cap->length + static_cast<size_t>(event->data_len) >= cap->capacity) {
-    cap->overflowed = true;
-    return ESP_OK;
-  }
-  memcpy(cap->data + cap->length, event->data, event->data_len);
-  cap->length += static_cast<size_t>(event->data_len);
-  cap->data[cap->length] = '\0';
-  return ESP_OK;
+  return bodyLength > 0;
+#else
+  (void)manifestUrl;
+  (void)body;
+  (void)bodySize;
+  if (statusCode != nullptr) *statusCode = 0;
+  return false;
+#endif
 }
 }  // namespace
 
@@ -111,7 +50,10 @@ int OtaUpdateService::compareSemver(const char* a, const char* b) {
 
   auto nextPart = [](const char*& p) -> int {
     while (*p && !isdigit(static_cast<unsigned char>(*p))) {
-      if (*p == '.') { ++p; break; }
+      if (*p == '.') {
+        ++p;
+        break;
+      }
       ++p;
     }
     int val = 0;
@@ -151,46 +93,18 @@ bool OtaUpdateService::checkReleaseUpdate(const char* manifestUrl,
     return false;
   }
 
-  char* body = static_cast<char*>(malloc(4096));
-  if (body == nullptr) {
-    result.message = "Out of memory allocating manifest buffer";
-    return false;
-  }
-  body[0] = '\0';
-
-  ManifestCapture capture = {body, 4096, 0, false};
-
-  esp_http_client_config_t config = {};
-  config.url = manifestUrl;
-  config.method = HTTP_METHOD_GET;
-  config.timeout_ms = static_cast<int>(DeviceConfig::otaHttpTimeoutMs);
-  config.crt_bundle_attach = esp_crt_bundle_attach;
-  config.event_handler = manifestCaptureEvent;
-  config.user_data = &capture;
-
-  esp_http_client_handle_t client = esp_http_client_init(&config);
-  if (client == nullptr) {
-    free(body);
-    result.message = "Could not initialize HTTP client";
-    return false;
-  }
-
-  const esp_err_t err = esp_http_client_perform(client);
-  const int statusCode = esp_http_client_get_status_code(client);
-  esp_http_client_cleanup(client);
-
-  if (err != ESP_OK || statusCode != 200 || capture.overflowed ||
-      capture.length == 0) {
-    free(body);
+  char body[kManifestBufferSize];
+  int statusCode = 0;
+  if (!fetchManifestBody(manifestUrl, body, sizeof(body), &statusCode) ||
+      statusCode != 200) {
     result.message =
-        "HTTP manifest request failed (status " + String(statusCode) + ")";
+        "Manifest fetch failed (status " + String(statusCode) + ")";
     return false;
   }
 
   cJSON* root = cJSON_Parse(body);
-  free(body);
   if (root == nullptr) {
-    result.message = "Failed to parse manifest JSON";
+    result.message = "Invalid manifest JSON";
     return false;
   }
 
@@ -233,7 +147,7 @@ bool OtaUpdateService::checkReleaseUpdate(const char* manifestUrl,
 
   if (!result.targetFound) {
     result.message =
-        "Target " + String(INKADS_TARGET_ID) + " not found in release manifest";
+        "Target " + String(INKADS_TARGET_ID) + " not in manifest";
     result.success = true;
     result.updateAvailable = false;
     return true;
@@ -246,8 +160,8 @@ bool OtaUpdateService::checkReleaseUpdate(const char* manifestUrl,
   if (result.updateAvailable) {
     result.message = "Update available: v" + result.availableVersion;
   } else {
-    result.message = "Firmware is up to date (v" +
-                     String(DeviceConfig::firmwareVersion) + ")";
+    result.message =
+        "Up to date (v" + String(DeviceConfig::firmwareVersion) + ")";
   }
   return true;
 }
@@ -260,11 +174,9 @@ bool OtaUpdateService::installReleaseUpdate(const char* downloadUrl,
     error = "Download URL is empty";
     return false;
   }
-
-  DownloadStreamContext ctx;
-  ctx.expectedSize = expectedSize;
-  if (expectedSha256 != nullptr) {
-    ctx.expectedSha256 = expectedSha256;
+  if (expectedSha256 == nullptr || strlen(expectedSha256) == 0) {
+    error = "SHA256 checksum is required";
+    return false;
   }
 
   esp_http_client_config_t config = {};
@@ -272,65 +184,100 @@ bool OtaUpdateService::installReleaseUpdate(const char* downloadUrl,
   config.method = HTTP_METHOD_GET;
   config.timeout_ms = static_cast<int>(DeviceConfig::otaHttpTimeoutMs);
   config.crt_bundle_attach = esp_crt_bundle_attach;
-  config.event_handler = otaDownloadEvent;
-  config.user_data = &ctx;
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
   if (client == nullptr) {
-    error = "Could not initialize HTTP client";
+    error = "HTTP client init failed";
     return false;
   }
 
-  Serial.print("Streaming firmware OTA update from: ");
-  Serial.println(downloadUrl);
+  bool ok = false;
+  size_t bytesReceived = 0;
+  mbedtls_sha256_context shaCtx;
+  bool shaStarted = false;
 
-  const esp_err_t result = esp_http_client_perform(client);
-  const int statusCode = esp_http_client_get_status_code(client);
-  esp_http_client_cleanup(client);
+  if (esp_http_client_open(client, 0) != ESP_OK) {
+    error = "Download open failed";
+    goto cleanup;
+  }
 
-  if (result != ESP_OK || statusCode != 200 || ctx.failed ||
-      !ctx.updateStarted) {
-    if (ctx.updateStarted) {
-      Update.abort();
-      mbedtls_sha256_free(&ctx.shaCtx);
+  esp_http_client_fetch_headers(client);
+  if (esp_http_client_get_status_code(client) != 200) {
+    error = "Download failed (status " +
+            String(esp_http_client_get_status_code(client)) + ")";
+    goto cleanup;
+  }
+
+  {
+    const int contentLength = esp_http_client_get_content_length(client);
+    size_t updateSize = (contentLength > 0) ? static_cast<size_t>(contentLength)
+                                            : expectedSize;
+    if (updateSize == 0) updateSize = UPDATE_SIZE_UNKNOWN;
+    if (!Update.begin(updateSize)) {
+      Update.printError(Serial);
+      error = "Update.begin failed";
+      goto cleanup;
     }
-    error = ctx.errorMessage.isEmpty()
-                ? "Download failed (status " + String(statusCode) + ")"
-                : ctx.errorMessage;
-    return false;
   }
 
-  if (ctx.expectedSize > 0 && ctx.bytesReceived != ctx.expectedSize) {
-    Update.abort();
-    mbedtls_sha256_free(&ctx.shaCtx);
-    error = "Image size mismatch: received " + String(ctx.bytesReceived) +
-            ", expected " + String(ctx.expectedSize);
-    return false;
+  mbedtls_sha256_init(&shaCtx);
+  mbedtls_sha256_starts(&shaCtx, 0);
+  shaStarted = true;
+
+  {
+    char buffer[kDownloadBufferSize];
+    while (true) {
+      const int readLen = esp_http_client_read(client, buffer, sizeof(buffer));
+      if (readLen < 0) {
+        error = "Download read failed";
+        goto cleanup;
+      }
+      if (readLen == 0) break;
+
+      if (Update.write(reinterpret_cast<uint8_t*>(buffer), readLen) !=
+          static_cast<size_t>(readLen)) {
+        Update.printError(Serial);
+        error = "Update.write failed";
+        goto cleanup;
+      }
+
+      mbedtls_sha256_update(&shaCtx,
+                            reinterpret_cast<const unsigned char*>(buffer),
+                            readLen);
+      bytesReceived += static_cast<size_t>(readLen);
+    }
   }
 
-  unsigned char hash[32];
-  mbedtls_sha256_finish(&ctx.shaCtx, hash);
-  mbedtls_sha256_free(&ctx.shaCtx);
+  if (expectedSize > 0 && bytesReceived != expectedSize) {
+    error = "Size mismatch";
+    goto cleanup;
+  }
 
-  if (!ctx.expectedSha256.isEmpty()) {
+  {
+    unsigned char hash[32];
     char calculatedHex[65];
+    mbedtls_sha256_finish(&shaCtx, hash);
     CryptoUtil::toHex(hash, 32, calculatedHex, sizeof(calculatedHex));
-    if (strcasecmp(calculatedHex, ctx.expectedSha256.c_str()) != 0) {
-      Update.abort();
-      error = "SHA256 mismatch: got " + String(calculatedHex) +
-              ", expected " + ctx.expectedSha256;
-      return false;
+    if (strcasecmp(calculatedHex, expectedSha256) != 0) {
+      error = "SHA256 mismatch";
+      goto cleanup;
     }
   }
 
   if (!Update.end(true)) {
     Update.printError(Serial);
-    error = "Firmware validation failed on finalize";
-    return false;
+    error = "Firmware validation failed";
+    goto cleanup;
   }
 
-  Serial.println("OTA firmware update verified and written successfully.");
-  return true;
+  ok = true;
+
+cleanup:
+  if (shaStarted) mbedtls_sha256_free(&shaCtx);
+  if (!ok && Update.isRunning()) Update.abort();
+  esp_http_client_close(client);
+  esp_http_client_cleanup(client);
+  return ok;
 }
 
 esp_err_t OtaUpdateService::handleHttpsUpdate(httpd_req_t* request) {
@@ -383,4 +330,3 @@ esp_err_t OtaUpdateService::handleHttpsUpdate(httpd_req_t* request) {
 }
 
 #endif
-

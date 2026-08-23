@@ -85,10 +85,10 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
     <p class="warning">Keep power connected until the device reboots. If this page
     sat idle for more than 10 minutes, sign in again before updating.</p>
     <div style="display:grid;gap:var(--ssd-space-300)">
-      <button class="secondary" type="button" id="otaCheckBtn">Check for release update</button>
+      <button class="secondary" type="button" id="otaCheckBtn">Check for update</button>
       <div id="otaReleaseStatus" class="status" role="status"></div>
       <div id="otaInstallWrap" hidden>
-        <button type="button" id="otaInstallBtn">Install release update</button>
+        <button type="button" id="otaInstallBtn">Install update</button>
       </div>
     </div>
     <h3 style="margin-top:var(--ssd-space-400)">Manual binary upload</h3>
@@ -184,20 +184,21 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
     const otaReleaseStatus=document.querySelector('#otaReleaseStatus');
     const otaInstallWrap=document.querySelector('#otaInstallWrap');
     const otaInstallBtn=document.querySelector('#otaInstallBtn');
-    let latestReleaseInfo=null;
+    let otaVersion='';
     if(otaCheckBtn){
       otaCheckBtn.addEventListener('click',async()=>{
-        otaReleaseStatus.textContent='Checking for updates...';
+        otaReleaseStatus.textContent='Checking...';
         otaCheckBtn.disabled=true;
         otaInstallWrap.hidden=true;
+        otaVersion='';
         try{
           const response=await fetch('/admin/ota/check',{method:'POST',credentials:'same-origin',
             headers:{'X-CSRF-Token':csrf}});
           const data=await response.json();
-          latestReleaseInfo=data;
           otaReleaseStatus.textContent=data.message||'Check complete';
-          if(data.update_available&&data.download_url){
-            otaInstallBtn.textContent='Install v'+data.available_version;
+          if(data.update_available&&data.available_version){
+            otaVersion=data.available_version;
+            otaInstallBtn.textContent='Install v'+otaVersion;
             otaInstallWrap.hidden=false;
           }
           if(response.status===401||response.status===403)location.reload();
@@ -209,25 +210,18 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
     }
     if(otaInstallBtn){
       otaInstallBtn.addEventListener('click',async()=>{
-        if(!latestReleaseInfo||!latestReleaseInfo.download_url)return;
-        const confirmed=window.confirm('Install firmware v'+latestReleaseInfo.available_version+' and restart?');
-        if(!confirmed)return;
-        otaReleaseStatus.textContent='Downloading and installing update... Keep power connected.';
+        if(!otaVersion)return;
+        if(!window.confirm('Install v'+otaVersion+' and restart?'))return;
+        otaReleaseStatus.textContent='Installing update... Keep power connected.';
         otaInstallBtn.disabled=true;
         otaCheckBtn.disabled=true;
         try{
           const response=await fetch('/admin/ota/install',{method:'POST',credentials:'same-origin',
-            headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
-            body:JSON.stringify({
-              download_url:latestReleaseInfo.download_url,
-              sha256:latestReleaseInfo.sha256,
-              size:latestReleaseInfo.size
-            })});
-          const text=await response.text();
-          otaReleaseStatus.textContent=text;
+            headers:{'X-CSRF-Token':csrf}});
+          otaReleaseStatus.textContent=await response.text();
           if(response.status===401||response.status===403)location.reload();
         }catch(error){
-          otaReleaseStatus.textContent='Installation failed or device disconnected.';
+          otaReleaseStatus.textContent='Installation failed.';
           otaInstallBtn.disabled=false;
           otaCheckBtn.disabled=false;
         }
