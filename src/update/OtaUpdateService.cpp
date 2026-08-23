@@ -76,6 +76,31 @@ esp_err_t otaDownloadEvent(esp_http_client_event_t* evt) {
 }
 }  // namespace
 
+namespace {
+struct ManifestCapture {
+  char* data = nullptr;
+  size_t capacity = 0;
+  size_t length = 0;
+  bool overflowed = false;
+};
+
+esp_err_t manifestCaptureEvent(esp_http_client_event_t* event) {
+  if (event->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
+  auto* cap = static_cast<ManifestCapture*>(event->user_data);
+  if (cap == nullptr || event->data == nullptr || event->data_len <= 0) {
+    return ESP_OK;
+  }
+  if (cap->length + static_cast<size_t>(event->data_len) >= cap->capacity) {
+    cap->overflowed = true;
+    return ESP_OK;
+  }
+  memcpy(cap->data + cap->length, event->data, event->data_len);
+  cap->length += static_cast<size_t>(event->data_len);
+  cap->data[cap->length] = '\0';
+  return ESP_OK;
+}
+}  // namespace
+
 int OtaUpdateService::compareSemver(const char* a, const char* b) {
   if (a == nullptr && b == nullptr) return 0;
   if (a == nullptr) return -1;
@@ -84,10 +109,27 @@ int OtaUpdateService::compareSemver(const char* a, const char* b) {
   while (*a == 'v' || *a == 'V') ++a;
   while (*b == 'v' || *b == 'V') ++b;
 
-  int aMaj = 0, aMin = 0, aPat = 0;
-  int bMaj = 0, bMin = 0, bPat = 0;
-  sscanf(a, "%d.%d.%d", &aMaj, &aMin, &aPat);
-  sscanf(b, "%d.%d.%d", &bMaj, &bMin, &bPat);
+  auto nextPart = [](const char*& p) -> int {
+    while (*p && !isdigit(static_cast<unsigned char>(*p))) {
+      if (*p == '.') { ++p; break; }
+      ++p;
+    }
+    int val = 0;
+    while (*p && isdigit(static_cast<unsigned char>(*p))) {
+      val = val * 10 + (*p - '0');
+      ++p;
+    }
+    if (*p == '.') ++p;
+    return val;
+  };
+
+  const int aMaj = nextPart(a);
+  const int aMin = nextPart(a);
+  const int aPat = nextPart(a);
+
+  const int bMaj = nextPart(b);
+  const int bMin = nextPart(b);
+  const int bPat = nextPart(b);
 
   if (aMaj != bMaj) return (aMaj > bMaj) ? 1 : -1;
   if (aMin != bMin) return (aMin > bMin) ? 1 : -1;
@@ -109,40 +151,21 @@ bool OtaUpdateService::checkReleaseUpdate(const char* manifestUrl,
     return false;
   }
 
-  char* body = static_cast<char*>(malloc(8192));
+  char* body = static_cast<char*>(malloc(4096));
   if (body == nullptr) {
     result.message = "Out of memory allocating manifest buffer";
     return false;
   }
   body[0] = '\0';
 
-  struct BodyCapture {
-    char* data;
-    size_t capacity;
-    size_t length;
-    bool overflowed;
-  } capture = {body, 8192, 0, false};
+  ManifestCapture capture = {body, 4096, 0, false};
 
   esp_http_client_config_t config = {};
   config.url = manifestUrl;
   config.method = HTTP_METHOD_GET;
   config.timeout_ms = static_cast<int>(DeviceConfig::otaHttpTimeoutMs);
   config.crt_bundle_attach = esp_crt_bundle_attach;
-  config.event_handler = [](esp_http_client_event_t* event) -> esp_err_t {
-    if (event->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
-    auto* cap = static_cast<BodyCapture*>(event->user_data);
-    if (cap == nullptr || event->data == nullptr || event->data_len <= 0) {
-      return ESP_OK;
-    }
-    if (cap->length + static_cast<size_t>(event->data_len) >= cap->capacity) {
-      cap->overflowed = true;
-      return ESP_OK;
-    }
-    memcpy(cap->data + cap->length, event->data, event->data_len);
-    cap->length += static_cast<size_t>(event->data_len);
-    cap->data[cap->length] = '\0';
-    return ESP_OK;
-  };
+  config.event_handler = manifestCaptureEvent;
   config.user_data = &capture;
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
