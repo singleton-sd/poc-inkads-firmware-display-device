@@ -429,6 +429,10 @@ esp_err_t LocalWebServer::checkOtaHttps(httpd_req_t* request) {
   otaUpdateService_.checkReleaseUpdate(DeviceConfig::otaManifestUrl, result);
 
   cJSON* json = cJSON_CreateObject();
+  if (json == nullptr) {
+    return sendText(request, "500 Internal Server Error", "application/json",
+                    "{\"success\":false,\"message\":\"Response build failed\"}");
+  }
   cJSON_AddBoolToObject(json, "success", result.success);
   cJSON_AddBoolToObject(json, "update_available", result.updateAvailable);
   cJSON_AddStringToObject(json, "available_version",
@@ -437,13 +441,15 @@ esp_err_t LocalWebServer::checkOtaHttps(httpd_req_t* request) {
 
   char* body = cJSON_PrintUnformatted(json);
   cJSON_Delete(json);
+  if (body == nullptr) {
+    return sendText(request, "500 Internal Server Error", "application/json",
+                    "{\"success\":false,\"message\":\"Response build failed\"}");
+  }
 
   httpd_resp_set_hdr(request, "Cache-Control", "no-store");
   httpd_resp_set_type(request, "application/json");
-  const esp_err_t status =
-      httpd_resp_send(request, body == nullptr ? "{}" : body,
-                      body == nullptr ? 2 : strlen(body));
-  if (body != nullptr) cJSON_free(body);
+  const esp_err_t status = httpd_resp_send(request, body, strlen(body));
+  cJSON_free(body);
   return status;
 }
 
