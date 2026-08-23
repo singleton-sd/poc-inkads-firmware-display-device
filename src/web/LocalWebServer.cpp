@@ -101,6 +101,10 @@ void LocalWebServer::begin() {
                  [this]() { refuseInsecureAdmin(); });
   httpServer_.on("/admin/update", HTTP_POST,
                  [this]() { refuseInsecureAdmin(); });
+  httpServer_.on("/admin/ota/check", HTTP_POST,
+                 [this]() { refuseInsecureAdmin(); });
+  httpServer_.on("/admin/ota/install", HTTP_POST,
+                 [this]() { refuseInsecureAdmin(); });
   httpServer_.on("/networks", HTTP_GET, [this]() { refuseInsecureAdmin(); });
   httpServer_.on("/admin/wifi", HTTP_POST,
                  [this]() { refuseInsecureAdmin(); });
@@ -216,6 +220,8 @@ bool LocalWebServer::startHttpsServer() {
          registerPost("/admin/tls-certificate", handleHttpsTlsCertificate) &&
 #if INKADS_FEATURE_OTA
          registerPost("/admin/update", handleHttpsUpdate) &&
+         registerPost("/admin/ota/check", handleHttpsOtaCheck) &&
+         registerPost("/admin/ota/install", handleHttpsOtaInstall) &&
 #endif
          registerGet("/networks", handleHttpsNetworks) &&
          registerPost("/admin/wifi", handleHttpsWifi) &&
@@ -252,6 +258,14 @@ esp_err_t LocalWebServer::handleHttpsLogout(httpd_req_t* request) {
 #if INKADS_FEATURE_OTA
 esp_err_t LocalWebServer::handleHttpsUpdate(httpd_req_t* request) {
   return static_cast<LocalWebServer*>(request->user_ctx)->updateHttps(request);
+}
+
+esp_err_t LocalWebServer::handleHttpsOtaCheck(httpd_req_t* request) {
+  return static_cast<LocalWebServer*>(request->user_ctx)->checkOtaHttps(request);
+}
+
+esp_err_t LocalWebServer::handleHttpsOtaInstall(httpd_req_t* request) {
+  return static_cast<LocalWebServer*>(request->user_ctx)->installOtaHttps(request);
 }
 #endif
 
@@ -291,6 +305,7 @@ esp_err_t LocalWebServer::sendHttpsAdmin(httpd_req_t* request) {
     String page = FPSTR(ADMIN_PAGE);
     page.replace("{{DESIGN_TOKENS}}", FPSTR(DESIGN_TOKENS_CSS));
     page.replace("{{VERSION}}", DeviceConfig::firmwareVersion);
+    page.replace("{{TARGET_ID}}", INKADS_TARGET_ID);
     page.replace("{{IP}}", WiFi.localIP().toString());
     const String connectedSsid = WiFi.SSID();
     page.replace("{{SSID}}", connectedSsid.isEmpty() ? "(unknown)" : connectedSsid);
@@ -402,6 +417,103 @@ esp_err_t LocalWebServer::updateHttps(httpd_req_t* request) {
   entraAuth_.sessions().touch();
   entraAuth_.sessions().applySessionCookie(request);
   return otaUpdateService_.handleHttpsUpdate(request);
+}
+
+esp_err_t LocalWebServer::checkOtaHttps(httpd_req_t* request) {
+  drainBody(request);
+  if (!requireSessionCsrf(request)) return ESP_OK;
+  entraAuth_.sessions().touch();
+  entraAuth_.sessions().applySessionCookie(request);
+
+  OtaCheckResult result;
+  otaUpdateService_.checkReleaseUpdate(DeviceConfig::otaManifestUrl, result);
+
+  cJSON* json = cJSON_CreateObject();
+  cJSON_AddBoolToObject(json, "success", result.success);
+  cJSON_AddStringToObject(json, "current_version", result.currentVersion.c_str());
+  cJSON_AddStringToObject(json, "target_id", result.targetId.c_str());
+  cJSON_AddStringToObject(json, "available_version",
+                         result.availableVersion.c_str());
+  cJSON_AddStringToObject(json, "channel", result.channel.c_str());
+  cJSON_AddBoolToObject(json, "update_available", result.updateAvailable);
+  cJSON_AddBoolToObject(json, "target_found", result.targetFound);
+  cJSON_AddStringToObject(json, "download_url", result.downloadUrl.c_str());
+  cJSON_AddStringToObject(json, "sha256", result.sha256.c_str());
+  cJSON_AddNumberToObject(json, "size", result.size);
+  cJSON_AddStringToObject(json, "message", result.message.c_str());
+
+  char* body = cJSON_PrintUnformatted(json);
+  cJSON_Delete(json);
+
+  httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+  httpd_resp_set_type(request, "application/json");
+  const esp_err_t status =
+      httpd_resp_send(request, body == nullptr ? "{}" : body,
+                      body == nullptr ? 2 : strlen(body));
+  if (body != nullptr) cJSON_free(body);
+  return status;
+}
+
+esp_err_t LocalWebServer::installOtaHttps(httpd_req_t* request) {
+  if (!requireSessionCsrf(request)) return ESP_OK;
+  entraAuth_.sessions().touch();
+  entraAuth_.sessions().applySessionCookie(request);
+
+  String body;
+  readRequestBody(request, body);
+
+  String downloadUrl;
+  String expectedSha256;
+  size_t expectedSize = 0;
+
+  if (!body.isEmpty()) {
+    cJSON* json = cJSON_Parse(body.c_str());
+    if (json != nullptr) {
+      const cJSON* urlItem =
+          cJSON_GetObjectItemCaseSensitive(json, "download_url");
+      const cJSON* shaItem = cJSON_GetObjectItemCaseSensitive(json, "sha256");
+      const cJSON* sizeItem = cJSON_GetObjectItemCaseSensitive(json, "size");
+      if (cJSON_IsString(urlItem) && urlItem->valuestring != nullptr) {
+        downloadUrl = urlItem->valuestring;
+      }
+      if (cJSON_IsString(shaItem) && shaItem->valuestring != nullptr) {
+        expectedSha256 = shaItem->valuestring;
+      }
+      if (cJSON_IsNumber(sizeItem)) {
+        expectedSize = static_cast<size_t>(sizeItem->valueint);
+      }
+      cJSON_Delete(json);
+    }
+  }
+
+  if (downloadUrl.isEmpty()) {
+    OtaCheckResult check;
+    if (!otaUpdateService_.checkReleaseUpdate(DeviceConfig::otaManifestUrl,
+                                            check) ||
+        !check.targetFound || check.downloadUrl.isEmpty()) {
+      const String msg = check.message.isEmpty()
+                             ? "Could not find firmware download URL for target"
+                             : check.message;
+      return sendText(request, "400 Bad Request", "text/plain", msg.c_str());
+    }
+    downloadUrl = check.downloadUrl;
+    expectedSha256 = check.sha256;
+    expectedSize = check.size;
+  }
+
+  String error;
+  if (!otaUpdateService_.installReleaseUpdate(
+          downloadUrl.c_str(), expectedSha256.c_str(), expectedSize, error)) {
+    const String msg = "OTA installation failed: " + error;
+    return sendText(request, "500 Internal Server Error", "text/plain",
+                    msg.c_str());
+  }
+
+  sendText(request, "200 OK", "text/plain",
+           "Update installed successfully. Device is restarting...");
+  delay(DeviceConfig::restartDelayMs);
+  ESP.restart();
+  return ESP_OK;
 }
 #endif
 

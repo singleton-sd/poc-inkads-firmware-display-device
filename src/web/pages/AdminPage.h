@@ -50,7 +50,7 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
     <h1>InkAds</h1>
     <p>Signed in with Microsoft Entra. Firmware updates stay on the local device.</p></header>
   <section class="card">
-    <div class="meta"><div><small>Firmware</small><strong>{{VERSION}}</strong></div>
+    <div class="meta"><div><small>Firmware</small><strong>{{VERSION}} ({{TARGET_ID}})</strong></div>
       <div><small>Device address</small><strong>{{IP}}</strong></div>
       <div><small>Wi-Fi network</small><strong>{{SSID}}</strong></div></div>
   </section>
@@ -83,11 +83,19 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
   <section class="card">
     <h2>Firmware update</h2>
     <p class="warning">Keep power connected until the device reboots. If this page
-    sat idle for more than 10 minutes, sign in again before uploading.</p>
+    sat idle for more than 10 minutes, sign in again before updating.</p>
+    <div style="display:grid;gap:var(--ssd-space-300)">
+      <button class="secondary" type="button" id="otaCheckBtn">Check for release update</button>
+      <div id="otaReleaseStatus" class="status" role="status"></div>
+      <div id="otaInstallWrap" hidden>
+        <button type="button" id="otaInstallBtn">Install release update</button>
+      </div>
+    </div>
+    <h3 style="margin-top:var(--ssd-space-400)">Manual binary upload</h3>
     <form id="ota"><label>Compiled application binary (.bin)
       <input id="firmware" name="firmware" type="file" accept=".bin" required></label>
       <progress id="progress" max="100" value="0"></progress>
-      <button type="submit">Install firmware</button><div id="status" class="status" role="status"></div>
+      <button type="submit">Install uploaded file</button><div id="status" class="status" role="status"></div>
     </form>
     <h2>TLS certificate rotation</h2>
     <p>Upload a renewed certificate bundle for this device hostname.</p>
@@ -172,6 +180,59 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
     const form=document.querySelector('#ota'),file=document.querySelector('#firmware'),
       progress=document.querySelector('#progress'),status=document.querySelector('#status');
     const tlsForm=document.querySelector('#tls'),tlsStatus=document.querySelector('#tlsStatus');
+    const otaCheckBtn=document.querySelector('#otaCheckBtn');
+    const otaReleaseStatus=document.querySelector('#otaReleaseStatus');
+    const otaInstallWrap=document.querySelector('#otaInstallWrap');
+    const otaInstallBtn=document.querySelector('#otaInstallBtn');
+    let latestReleaseInfo=null;
+    if(otaCheckBtn){
+      otaCheckBtn.addEventListener('click',async()=>{
+        otaReleaseStatus.textContent='Checking for updates...';
+        otaCheckBtn.disabled=true;
+        otaInstallWrap.hidden=true;
+        try{
+          const response=await fetch('/admin/ota/check',{method:'POST',credentials:'same-origin',
+            headers:{'X-CSRF-Token':csrf}});
+          const data=await response.json();
+          latestReleaseInfo=data;
+          otaReleaseStatus.textContent=data.message||'Check complete';
+          if(data.update_available&&data.download_url){
+            otaInstallBtn.textContent='Install v'+data.available_version;
+            otaInstallWrap.hidden=false;
+          }
+          if(response.status===401||response.status===403)location.reload();
+        }catch(error){
+          otaReleaseStatus.textContent='Could not check for updates.';
+        }
+        otaCheckBtn.disabled=false;
+      });
+    }
+    if(otaInstallBtn){
+      otaInstallBtn.addEventListener('click',async()=>{
+        if(!latestReleaseInfo||!latestReleaseInfo.download_url)return;
+        const confirmed=window.confirm('Install firmware v'+latestReleaseInfo.available_version+' and restart?');
+        if(!confirmed)return;
+        otaReleaseStatus.textContent='Downloading and installing update... Keep power connected.';
+        otaInstallBtn.disabled=true;
+        otaCheckBtn.disabled=true;
+        try{
+          const response=await fetch('/admin/ota/install',{method:'POST',credentials:'same-origin',
+            headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
+            body:JSON.stringify({
+              download_url:latestReleaseInfo.download_url,
+              sha256:latestReleaseInfo.sha256,
+              size:latestReleaseInfo.size
+            })});
+          const text=await response.text();
+          otaReleaseStatus.textContent=text;
+          if(response.status===401||response.status===403)location.reload();
+        }catch(error){
+          otaReleaseStatus.textContent='Installation failed or device disconnected.';
+          otaInstallBtn.disabled=false;
+          otaCheckBtn.disabled=false;
+        }
+      });
+    }
     form.addEventListener('submit',event=>{event.preventDefault();const request=new XMLHttpRequest();
       request.open('POST','/admin/update');request.upload.onprogress=e=>{
         if(e.lengthComputable)progress.value=Math.round(e.loaded/e.total*100)};

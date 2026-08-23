@@ -33,6 +33,8 @@ class LocalWebServer {
   static esp_err_t handleHttpsLogout(httpd_req_t* request);
   static esp_err_t handleHttpsTlsCertificate(httpd_req_t* request);
   static esp_err_t handleHttpsUpdate(httpd_req_t* request);
+  static esp_err_t handleHttpsOtaCheck(httpd_req_t* request);
+  static esp_err_t handleHttpsOtaInstall(httpd_req_t* request);
   static esp_err_t handleHttpsNetworks(httpd_req_t* request);
   static esp_err_t handleHttpsWifi(httpd_req_t* request);
   static esp_err_t handleHttpsReset(httpd_req_t* request);
@@ -44,6 +46,8 @@ class LocalWebServer {
   esp_err_t logoutHttps(httpd_req_t* request);
   esp_err_t updateTlsCertificate(httpd_req_t* request);
   esp_err_t updateHttps(httpd_req_t* request);
+  esp_err_t checkOtaHttps(httpd_req_t* request);
+  esp_err_t installOtaHttps(httpd_req_t* request);
   esp_err_t sendHttpsNetworks(httpd_req_t* request);
   esp_err_t updateWifiHttps(httpd_req_t* request);
   esp_err_t resetHttps(httpd_req_t* request);

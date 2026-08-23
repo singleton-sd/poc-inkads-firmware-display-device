@@ -112,11 +112,15 @@ Environment variables:
 - `ACME_EMAIL`, `HOSTED_ZONE_ID`, `DEVICE_HOSTNAME` for cert issuance
 - `DEVICE_BASE_URL`, `SESSION_COOKIE`, `CSRF_TOKEN` for upload
 
-### Server-pull follow-up (phase 2)
+### OTA firmware release updates (server-pull)
 
-Automated device pull from a trusted service is tracked separately in
-[POC-249 follow-up](https://app.clickup.com/t/86d42hdwk). It is not implemented
-in this firmware change.
+The firmware can check for and download released firmware binaries directly from GitHub Releases:
+
+1. In the admin page, click **Check for release update** (or call `POST /admin/ota/check`).
+2. The device fetches `inkads-manifest.json` from the repository releases via HTTPS (`DeviceConfig::otaManifestUrl`), parses the target list, and compares the released semantic version with `DeviceConfig::firmwareVersion`.
+3. If an update matching the board target (`INKADS_TARGET_ID`) is found and is newer, click **Install release update** (or call `POST /admin/ota/install`).
+4. The device streams the `.bin` image directly into the inactive OTA partition, verifies the SHA-256 checksum and download size, and restarts into the updated firmware upon successful validation.
+5. Manual `.bin` upload via `POST /admin/update` is retained as an offline/recovery fallback.
 
 ### Physical recovery
 
