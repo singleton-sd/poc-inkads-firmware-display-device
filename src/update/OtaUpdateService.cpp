@@ -19,7 +19,58 @@
 
 namespace {
 constexpr size_t kManifestBufferSize = 1024;
-constexpr size_t kDownloadBufferSize = 512;
+
+struct DownloadContext {
+  size_t expectedSize = 0;
+  const char* expectedSha256 = nullptr;
+  size_t bytesReceived = 0;
+  bool updateStarted = false;
+  bool failed = false;
+  String errorMessage;
+  mbedtls_sha256_context shaCtx;
+};
+
+esp_err_t otaDownloadEvent(esp_http_client_event_t* evt) {
+  auto* ctx = static_cast<DownloadContext*>(evt->user_data);
+  if (ctx == nullptr) return ESP_OK;
+
+  if (evt->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
+
+  const int statusCode = esp_http_client_get_status_code(evt->client);
+  if (statusCode != 200 || evt->data_len <= 0) return ESP_OK;
+
+  if (!ctx->updateStarted) {
+    const int contentLength = esp_http_client_get_content_length(evt->client);
+    size_t updateSize = (contentLength > 0)
+                            ? static_cast<size_t>(contentLength)
+                            : ctx->expectedSize;
+    if (updateSize == 0) updateSize = UPDATE_SIZE_UNKNOWN;
+    if (!Update.begin(updateSize)) {
+      ctx->failed = true;
+      ctx->errorMessage = "Update.begin failed";
+      Update.printError(Serial);
+      return ESP_FAIL;
+    }
+    mbedtls_sha256_init(&ctx->shaCtx);
+    mbedtls_sha256_starts(&ctx->shaCtx, 0);
+    ctx->updateStarted = true;
+  }
+
+  if (Update.write(reinterpret_cast<uint8_t*>(evt->data), evt->data_len) !=
+      static_cast<size_t>(evt->data_len)) {
+    ctx->failed = true;
+    ctx->errorMessage = "Update.write failed";
+    Update.printError(Serial);
+    Update.abort();
+    return ESP_FAIL;
+  }
+
+  mbedtls_sha256_update(&ctx->shaCtx,
+                        reinterpret_cast<const unsigned char*>(evt->data),
+                        evt->data_len);
+  ctx->bytesReceived += static_cast<size_t>(evt->data_len);
+  return ESP_OK;
+}
 
 bool fetchManifestBody(const char* manifestUrl, char* body, size_t bodySize,
                        int* statusCode) {
@@ -179,11 +230,17 @@ bool OtaUpdateService::installReleaseUpdate(const char* downloadUrl,
     return false;
   }
 
+  DownloadContext ctx;
+  ctx.expectedSize = expectedSize;
+  ctx.expectedSha256 = expectedSha256;
+
   esp_http_client_config_t config = {};
   config.url = downloadUrl;
   config.method = HTTP_METHOD_GET;
   config.timeout_ms = static_cast<int>(DeviceConfig::otaHttpTimeoutMs);
   config.crt_bundle_attach = esp_crt_bundle_attach;
+  config.event_handler = otaDownloadEvent;
+  config.user_data = &ctx;
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
   if (client == nullptr) {
@@ -191,93 +248,55 @@ bool OtaUpdateService::installReleaseUpdate(const char* downloadUrl,
     return false;
   }
 
-  bool ok = false;
-  size_t bytesReceived = 0;
-  mbedtls_sha256_context shaCtx;
-  bool shaStarted = false;
+  const esp_err_t result = esp_http_client_perform(client);
+  const int statusCode = esp_http_client_get_status_code(client);
+  const bool complete = esp_http_client_is_complete_data_received(client);
+  esp_http_client_cleanup(client);
 
-  if (esp_http_client_open(client, 0) != ESP_OK) {
-    error = "Download open failed";
-    goto cleanup;
-  }
-
-  esp_http_client_fetch_headers(client);
-  if (esp_http_client_get_status_code(client) != 200) {
-    error = "Download failed (status " +
-            String(esp_http_client_get_status_code(client)) + ")";
-    goto cleanup;
-  }
-
-  {
-    const int contentLength = esp_http_client_get_content_length(client);
-    size_t updateSize = (contentLength > 0) ? static_cast<size_t>(contentLength)
-                                            : expectedSize;
-    if (updateSize == 0) updateSize = UPDATE_SIZE_UNKNOWN;
-    if (!Update.begin(updateSize)) {
-      Update.printError(Serial);
-      error = "Update.begin failed";
-      goto cleanup;
+  if (result != ESP_OK || statusCode != 200 || ctx.failed ||
+      !ctx.updateStarted) {
+    if (ctx.updateStarted) {
+      Update.abort();
+      mbedtls_sha256_free(&ctx.shaCtx);
     }
+    error = ctx.errorMessage.isEmpty()
+                ? "Download failed (status " + String(statusCode) + ")"
+                : ctx.errorMessage;
+    return false;
   }
 
-  mbedtls_sha256_init(&shaCtx);
-  mbedtls_sha256_starts(&shaCtx, 0);
-  shaStarted = true;
-
-  {
-    char buffer[kDownloadBufferSize];
-    while (true) {
-      const int readLen = esp_http_client_read(client, buffer, sizeof(buffer));
-      if (readLen < 0) {
-        error = "Download read failed";
-        goto cleanup;
-      }
-      if (readLen == 0) break;
-
-      if (Update.write(reinterpret_cast<uint8_t*>(buffer), readLen) !=
-          static_cast<size_t>(readLen)) {
-        Update.printError(Serial);
-        error = "Update.write failed";
-        goto cleanup;
-      }
-
-      mbedtls_sha256_update(&shaCtx,
-                            reinterpret_cast<const unsigned char*>(buffer),
-                            readLen);
-      bytesReceived += static_cast<size_t>(readLen);
-    }
+  if (!complete) {
+    Update.abort();
+    mbedtls_sha256_free(&ctx.shaCtx);
+    error = "Download truncated";
+    return false;
   }
 
-  if (expectedSize > 0 && bytesReceived != expectedSize) {
+  if (expectedSize > 0 && ctx.bytesReceived != expectedSize) {
+    Update.abort();
+    mbedtls_sha256_free(&ctx.shaCtx);
     error = "Size mismatch";
-    goto cleanup;
+    return false;
   }
 
-  {
-    unsigned char hash[32];
-    char calculatedHex[65];
-    mbedtls_sha256_finish(&shaCtx, hash);
-    CryptoUtil::toHex(hash, 32, calculatedHex, sizeof(calculatedHex));
-    if (strcasecmp(calculatedHex, expectedSha256) != 0) {
-      error = "SHA256 mismatch";
-      goto cleanup;
-    }
+  unsigned char hash[32];
+  char calculatedHex[65];
+  mbedtls_sha256_finish(&ctx.shaCtx, hash);
+  mbedtls_sha256_free(&ctx.shaCtx);
+  CryptoUtil::toHex(hash, 32, calculatedHex, sizeof(calculatedHex));
+  if (strcasecmp(calculatedHex, expectedSha256) != 0) {
+    Update.abort();
+    error = "SHA256 mismatch";
+    return false;
   }
 
   if (!Update.end(true)) {
     Update.printError(Serial);
     error = "Firmware validation failed";
-    goto cleanup;
+    return false;
   }
 
-  ok = true;
-
-cleanup:
-  if (shaStarted) mbedtls_sha256_free(&shaCtx);
-  if (!ok && Update.isRunning()) Update.abort();
-  esp_http_client_close(client);
-  esp_http_client_cleanup(client);
-  return ok;
+  return true;
 }
 
 esp_err_t OtaUpdateService::handleHttpsUpdate(httpd_req_t* request) {

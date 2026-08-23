@@ -428,21 +428,23 @@ esp_err_t LocalWebServer::checkOtaHttps(httpd_req_t* request) {
   OtaCheckResult result;
   otaUpdateService_.checkReleaseUpdate(DeviceConfig::otaManifestUrl, result);
 
-  String body;
-  body.reserve(192);
-  body += "{\"success\":";
-  body += result.success ? "true" : "false";
-  body += ",\"update_available\":";
-  body += result.updateAvailable ? "true" : "false";
-  body += ",\"available_version\":\"";
-  body += result.availableVersion;
-  body += "\",\"message\":\"";
-  body += result.message;
-  body += "\"}";
+  cJSON* json = cJSON_CreateObject();
+  cJSON_AddBoolToObject(json, "success", result.success);
+  cJSON_AddBoolToObject(json, "update_available", result.updateAvailable);
+  cJSON_AddStringToObject(json, "available_version",
+                          result.availableVersion.c_str());
+  cJSON_AddStringToObject(json, "message", result.message.c_str());
+
+  char* body = cJSON_PrintUnformatted(json);
+  cJSON_Delete(json);
 
   httpd_resp_set_hdr(request, "Cache-Control", "no-store");
   httpd_resp_set_type(request, "application/json");
-  return httpd_resp_send(request, body.c_str(), body.length());
+  const esp_err_t status =
+      httpd_resp_send(request, body == nullptr ? "{}" : body,
+                      body == nullptr ? 2 : strlen(body));
+  if (body != nullptr) cJSON_free(body);
+  return status;
 }
 
 esp_err_t LocalWebServer::installOtaHttps(httpd_req_t* request) {

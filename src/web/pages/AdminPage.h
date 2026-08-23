@@ -220,6 +220,10 @@ const char ADMIN_PAGE[] PROGMEM = R"html(
             headers:{'X-CSRF-Token':csrf}});
           otaReleaseStatus.textContent=await response.text();
           if(response.status===401||response.status===403)location.reload();
+          else if(!response.ok){
+            otaInstallBtn.disabled=false;
+            otaCheckBtn.disabled=false;
+          }
         }catch(error){
           otaReleaseStatus.textContent='Installation failed.';
           otaInstallBtn.disabled=false;
