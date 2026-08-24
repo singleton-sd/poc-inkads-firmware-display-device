@@ -28,8 +28,9 @@ Code Flow. The device talks to the tenant authority directly; it does not host
 a password and does not use a client secret.
 
 The admin page can scan and change the 2.4 GHz Wi-Fi network, erase saved
-settings, rotate the TLS certificate, and install an Arduino application
-`.bin` through the ESP32 OTA partition. Setup and admin both load
+settings, rotate the TLS certificate, check for GitHub Release firmware
+updates, and install an Arduino application `.bin` through the ESP32 OTA
+partition (release pull or manual upload). Setup and admin both load
 `/networks` for a scanned SSID list, with an Other option for hidden or
 missing names. Password values are never logged.
 
@@ -86,7 +87,7 @@ bundle exists, the firmware attempts one-time bootstrap from
 `src/config/TlsCredentials.local.h` (for development provisioning), validates
 it, then writes it to flash.
 
-### Admin-page certificate rotation (phase 1)
+### Admin-page certificate rotation
 
 1. Sign in to `https://inkads-xxxxxx.devices.singletonsd.com/admin`.
 2. Upload renewed certificate PEM + private key PEM in the **TLS certificate
@@ -97,6 +98,9 @@ it, then writes it to flash.
    restart.
 
 If validation fails, the current active certificate remains unchanged.
+
+Automated device pull of renewed TLS certificates from a trusted service is
+not implemented. Use the operator scripts below or the admin upload form.
 
 ### Operator scripts
 
@@ -112,18 +116,18 @@ Environment variables:
 - `ACME_EMAIL`, `HOSTED_ZONE_ID`, `DEVICE_HOSTNAME` for cert issuance
 - `DEVICE_BASE_URL`, `SESSION_COOKIE`, `CSRF_TOKEN` for upload
 
-### OTA firmware release updates (server-pull)
+## OTA firmware release updates (server-pull)
 
 The firmware can check for and download released firmware binaries directly from GitHub Releases:
 
-1. In the admin page, click **Check for release update** (or call `POST /admin/ota/check`).
+1. In the admin page, click **Check for update** (or call `POST /admin/ota/check`).
 2. The device fetches `inkads-manifest.json` from the repository releases via HTTPS (`DeviceConfig::otaManifestUrl`), parses the target list, and compares the released semantic version with `DeviceConfig::firmwareVersion`.
 3. If an update matching the board target (`INKADS_TARGET_ID`) is found and is newer, click **Install update** (or call `POST /admin/ota/install`).
 4. Install returns `202 Accepted` and runs in a background task so the admin HTTPS server stays responsive. Poll `GET /admin/ota/status` for `running` / `succeeded` / `failed`.
 5. The device streams the `.bin` image into the inactive OTA partition, verifies SHA-256 and size, then restarts after a successful install.
 6. Manual `.bin` upload via `POST /admin/update` is retained as an offline/recovery fallback.
 
-### Physical recovery
+## Physical recovery
 
 There is no remote password bypass. If Entra IDs, TLS certificates, or Wi-Fi
 settings are wrong:
