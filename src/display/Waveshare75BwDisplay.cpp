@@ -112,15 +112,21 @@ FramebufferStatus Waveshare75BwDisplay::displayFramebuffer(const uint8_t* data, 
   return FramebufferStatus::Ok;
 }
 
-void Waveshare75BwDisplay::sleep() {
+bool Waveshare75BwDisplay::sleep() {
   if (!ready_) {
-    return;
+    return true;
   }
   sendCommand(0x02);
-  waitWhileBusy();
+  if (!waitWhileBusy()) {
+    if (DeviceConfig::debugLogging) {
+      Serial.println("E-paper: sleep power-off BUSY timeout");
+    }
+    return false;
+  }
   sendCommand(0x07);
   sendData(0xA5);
   ready_ = false;
+  return true;
 }
 
 void Waveshare75BwDisplay::resetPanel() {

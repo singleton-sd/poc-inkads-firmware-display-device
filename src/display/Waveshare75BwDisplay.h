@@ -25,7 +25,8 @@ class Waveshare75BwDisplay {
  public:
   bool begin();
   FramebufferStatus displayFramebuffer(const uint8_t* data, size_t length);
-  void sleep();
+  // Returns false if power-off timed out before deep-sleep (0x07) was sent.
+  bool sleep();
   bool isReady() const { return ready_; }
 
  private:
