@@ -25,5 +25,5 @@
 #endif
 
 #ifndef INKADS_FEATURE_EPAPER
-#define INKADS_FEATURE_EPAPER 0
+#define INKADS_FEATURE_EPAPER 1
 #endif

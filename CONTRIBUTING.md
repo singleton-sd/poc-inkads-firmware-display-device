@@ -106,8 +106,7 @@ When you add a feature:
    `"suffix": "full"`.
 4. On size-reduced targets, list only the flags that cut needs.
 5. Set the matching `#define` in committed `src/config/InkAdsFeatures.h` to
-   `1` so Arduino IDE matches `full`. Use `0` only for an unimplemented
-   stub (today: `epaper`).
+   `1` so Arduino IDE matches `full`.
 
 `scripts/compile.sh` overwrites `InkAdsFeatures.h` in a temp sketch copy
 from the catalog before each compile. The committed header is the IDE

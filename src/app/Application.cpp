@@ -7,6 +7,13 @@
 #include "../network/TimeSync.h"
 #include "../platform/DeviceIdentity.h"
 
+#if INKADS_FEATURE_EPAPER
+#include "../display/DisplayProfile.h"
+#include "../display/Framebuffer.h"
+#include "../display/FramebufferFixture.h"
+#include "../display/Waveshare75BwDisplay.h"
+#endif
+
 void Application::begin() {
   Serial.begin(DeviceConfig::serialBaud);
   delay(500);
@@ -17,6 +24,10 @@ void Application::begin() {
   Serial.println(INKADS_TARGET_ID);
   Serial.print("Device id: ");
   Serial.println(DeviceIdentity::suffix());
+
+#if INKADS_FEATURE_EPAPER
+  beginEpaper();
+#endif
 
   const DeviceSettings settings = configStore_.load();
   if (wifiConnection_.connect(settings)) {
@@ -51,3 +62,23 @@ void Application::startProvisioningMode() {
   }
   deviceMode_ = DeviceMode::Provisioning;
 }
+
+#if INKADS_FEATURE_EPAPER
+void Application::beginEpaper() {
+  if (!epaperDisplay_.begin()) {
+    Serial.println("E-paper: failed to initialise panel");
+    return;
+  }
+
+  static uint8_t fixture[DisplayProfile::kPackedByteLength];
+  fillCheckerboardFixture(fixture, sizeof(fixture));
+  const FramebufferStatus status =
+      epaperDisplay_.displayFramebuffer(fixture, sizeof(fixture));
+  if (status != FramebufferStatus::Ok) {
+    Serial.print("E-paper: fixture display failed: ");
+    Serial.println(framebufferStatusToString(status));
+    return;
+  }
+  Serial.println("E-paper: checkerboard fixture displayed");
+}
+#endif
