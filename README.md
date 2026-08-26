@@ -22,6 +22,20 @@ folder, so the thin entrypoint is named `display-device.ino`.
 Firmware accepts a **display-ready** packed framebuffer only (no JPEG/PNG on
 device). Profile id: `waveshare-7.5-bw` (800×480, 1 bpp, 48,000 bytes).
 
+Packed buffer contract (must match the renderer packer and
+`fillCheckerboardFixture()`):
+
+| Rule | Value |
+| --- | --- |
+| Layout | Row-major, left→right then top→bottom |
+| Bytes per row | 100 (`800 / 8`) |
+| Bit order | MSB = leftmost pixel in the byte |
+| Dark / black pixel | Bit value `1` |
+| White pixel | Bit value `0` |
+
+The UC8179 driver inverts bytes on the SPI wire; producers must **not**
+pre-invert. Polarity/orientation remain provisional until physical validation.
+
 Default SPI wiring (override in `EPaperPins` if your harness differs):
 
 | Signal | GPIO |

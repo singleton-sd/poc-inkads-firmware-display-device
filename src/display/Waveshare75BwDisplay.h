@@ -30,11 +30,13 @@ class Waveshare75BwDisplay {
 
  private:
   void resetPanel();
-  void waitWhileBusy();
+  // Returns false if BUSY did not clear before the timeout (panel fault / wiring).
+  bool waitWhileBusy(uint32_t timeoutMs = 30000);
   void sendCommand(uint8_t command);
   void sendData(uint8_t data);
-  void sendDataBuffer(const uint8_t* data, size_t length);
-  void initPanel();
+  void sendDataBufferInverted(const uint8_t* data, size_t length);
+  void setLut();
+  bool initPanel();
 
   bool ready_ = false;
 };

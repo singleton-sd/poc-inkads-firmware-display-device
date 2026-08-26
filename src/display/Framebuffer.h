@@ -10,6 +10,7 @@ enum class FramebufferStatus : uint8_t {
   Ok = 0,
   NullPointer,
   WrongSize,
+  PanelTimeout,
 };
 
 inline FramebufferStatus validatePackedFramebuffer(const uint8_t* data, size_t length) {
@@ -30,6 +31,8 @@ inline const char* framebufferStatusToString(FramebufferStatus status) {
       return "null_pointer";
     case FramebufferStatus::WrongSize:
       return "wrong_size";
+    case FramebufferStatus::PanelTimeout:
+      return "panel_timeout";
     default:
       return "unknown";
   }
