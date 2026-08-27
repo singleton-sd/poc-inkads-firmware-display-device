@@ -14,12 +14,42 @@ folder, so the thin entrypoint is named `display-device.ino`.
 4. Run wildcard DNS and a captive setup page at `http://192.168.4.1`.
 5. Scan nearby 2.4 GHz networks, save submitted credentials to NVS, and restart.
 6. Connect to Wi-Fi, synchronize time over NTP, and enter normal mode.
+7. When the `epaper` feature is enabled (default `full` target), initialise the
+   Waveshare 7.5" B/W panel and refresh a 48,000-byte checkerboard fixture.
 
-After credentials are saved, the browser displays a 15-second countdown and
-redirects to the stable device-derived mDNS address
-`http://inkads-xxxxxx.local/`. The ESP32 advertises that hostname after joining
-the configured network. The suffix is derived from the device identity, so it
-remains stable across reboots and avoids collisions between InkAds devices.
+### E-paper panel (feature `epaper`)
+
+Firmware accepts a **display-ready** packed framebuffer only (no JPEG/PNG on
+device). Profile id: `waveshare-7.5-bw` (800×480, 1 bpp, 48,000 bytes).
+
+Packed buffer contract (must match the renderer packer and
+`fillCheckerboardFixture()`):
+
+| Rule | Value |
+| --- | --- |
+| Layout | Row-major, left→right then top→bottom |
+| Bytes per row | 100 (`800 / 8`) |
+| Bit order | MSB = leftmost pixel in the byte |
+| Dark / black pixel | Bit value `1` |
+| White pixel | Bit value `0` |
+
+The UC8179 driver inverts bytes on the SPI wire; producers must **not**
+pre-invert. Polarity/orientation remain provisional until physical validation.
+
+Default SPI wiring (override in `EPaperPins` if your harness differs):
+
+| Signal | GPIO |
+| --- | --- |
+| BUSY | 4 |
+| RST | 16 |
+| DC | 17 |
+| CS | 5 |
+| CLK | 18 |
+| DIN | 23 |
+
+On boot the device validates framebuffer size, rejects mismatched lengths, and
+displays a local checkerboard fixture for bring-up. Cloud download (POC-256)
+follows once local refresh is confirmed on hardware.
 
 Administration is served only over HTTPS at `/admin`. The trusted URL is
 `https://inkads-xxxxxx.devices.singletonsd.com/admin`, where `xxxxxx` is the

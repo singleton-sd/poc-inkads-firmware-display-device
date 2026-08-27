@@ -24,7 +24,8 @@
         "provisioning",
         "https_admin",
         "entra",
-        "ota"
+        "ota",
+        "epaper"
       ],
       "suffix": "full"
     }
