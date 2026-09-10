@@ -68,6 +68,12 @@ compiled into the firmware. The device does not request internet-hosted assets.
 The normal device homepage, provisioning portal, and admin interface all use
 the same embedded token variables and local system-font stack.
 
+Brand mark binaries (mono SVG/PNG, favicons) for host-side packing or future
+chrome live in
+[poc-inkads-assets](https://github.com/singleton-sd/poc-inkads-assets);
+consume contract:
+[docs/firmware-consume.md](https://github.com/singleton-sd/poc-inkads-assets/blob/main/docs/firmware-consume.md).
+
 ## Microsoft Entra sign-in
 
 Tenant ID, application/client ID, and the `InkAds.Admin` role name live in
