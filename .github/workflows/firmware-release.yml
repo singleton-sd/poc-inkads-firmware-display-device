@@ -74,10 +74,12 @@ jobs:
         with:
           ref: ${{ inputs.sha || inputs.tag || github.ref }}
           token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
 
       - name: Overlay current release scripts
         run: |
           set -euo pipefail
+          mkdir -p scripts
           cp -a "$RUNNER_TEMP/inkads-release-scripts/." scripts/
 
       - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
@@ -94,11 +96,13 @@ jobs:
             exit 1
           fi
           version="${tag#v}"
-          # Fallback: stamp version.json / DeviceConfig.h from the tag when
-          # they do not already match (committed files are the source of truth).
-          if [[ -f scripts/inject_firmware_version.sh ]]; then
-            bash scripts/inject_firmware_version.sh "$version"
+          # Overlay copies this script from the workflow revision so historical
+          # tags still stamp version.json / DeviceConfig.h from the tag.
+          if [[ ! -f scripts/inject_firmware_version.sh ]]; then
+            echo "error: inject_firmware_version.sh missing after overlay" >&2
+            exit 1
           fi
+          bash scripts/inject_firmware_version.sh "$version"
           echo "INKADS_FIRMWARE_VERSION=$version" >>"$GITHUB_ENV"
           echo "RELEASE_TAG=$tag" >>"$GITHUB_ENV"
           echo "tag=$tag" >>"$GITHUB_OUTPUT"

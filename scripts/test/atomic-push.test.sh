@@ -41,6 +41,13 @@ assert_contains "$firmware_yml" 'repositories: ${{ github.event.repository.name 
   'firmware-release.yml scopes the App token to this repository'
 assert_contains "$firmware_yml" 'Overlay current release scripts' \
   'firmware-release.yml overlays scripts from the workflow revision'
+assert_contains "$firmware_yml" 'mkdir -p scripts' \
+  'overlay creates scripts/ when a historical tag lacks it'
+persist_count="$(grep -c 'persist-credentials: false' "$FIRMWARE" || true)"
+assert_eq "2" "$persist_count" \
+  'both firmware-release checkouts drop persisted credentials'
+assert_contains "$firmware_yml" 'inject_firmware_version.sh missing after overlay' \
+  'firmware-release.yml fails closed if overlay did not restore inject'
 
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
@@ -88,3 +95,23 @@ if git -C "$REMOTE" rev-parse refs/tags/v0.0.1 >/dev/null 2>&1; then
   echo "tag v0.0.1 must not exist on the remote" >&2
   exit 1
 fi
+
+# Historical tags lack inject_firmware_version.sh. Overlaying current
+# scripts/ onto that tree must restore it and replace compile.sh.
+OVERLAY_SRC="$WORKDIR/current-scripts"
+OVERLAY_DST="$WORKDIR/historical-tag/scripts"
+mkdir -p "$OVERLAY_SRC" "$OVERLAY_DST"
+cp -a "$ROOT/scripts/." "$OVERLAY_SRC/"
+printf 'old-compile without version flag\n' >"$OVERLAY_DST/compile.sh"
+if [[ -e "$OVERLAY_DST/inject_firmware_version.sh" ]]; then
+  echo "historical fixture must not already contain inject_firmware_version.sh" >&2
+  exit 1
+fi
+mkdir -p "$OVERLAY_DST"
+cp -a "$OVERLAY_SRC/." "$OVERLAY_DST/"
+if [[ ! -f "$OVERLAY_DST/inject_firmware_version.sh" ]]; then
+  echo "overlay must restore inject_firmware_version.sh" >&2
+  exit 1
+fi
+assert_contains "$(cat "$OVERLAY_DST/compile.sh")" '--version' \
+  'overlay replaces historical compile.sh with current --version support'
