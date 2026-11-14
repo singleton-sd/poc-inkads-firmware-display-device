@@ -17,6 +17,8 @@ assert_eq() {
   fi
 }
 
+orig_version="$(jq -er '.version' "$ROOT/version.json")"
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -31,8 +33,8 @@ assert_eq "stable" "$(jq -er '.channel' "$TMP/version.json")" "channel preserved
 grep -Fq '#define INKADS_FIRMWARE_VERSION "9.9.9"' "$TMP/src/config/DeviceConfig.h" \
   || { echo "header was not stamped" >&2; exit 1; }
 
-assert_eq "0.0.0" "$(jq -er '.version' "$ROOT/version.json")" "repo version.json unchanged"
-grep -Fq '#define INKADS_FIRMWARE_VERSION "0.0.0"' "$ROOT/src/config/DeviceConfig.h" \
+assert_eq "$orig_version" "$(jq -er '.version' "$ROOT/version.json")" "repo version.json unchanged"
+grep -Fq "#define INKADS_FIRMWARE_VERSION \"$orig_version\"" "$ROOT/src/config/DeviceConfig.h" \
   || { echo "repo DeviceConfig.h was changed" >&2; exit 1; }
 
 OLD="$TMP/old"

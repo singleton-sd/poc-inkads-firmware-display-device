@@ -66,32 +66,40 @@ After that:
 
 ## Release process
 
-Releases are **tag-only**. Automation never commits or pushes to `main`, and
-it does not bypass branch rulesets.
+Do not open a version-bump PR. The Release workflow commits version files
+to `main` using the **singleton-release** GitHub App, which Pato adds to
+the default-branch ruleset bypass list. It never falls back to
+`GITHUB_TOKEN` for that push.
 
-1. Merge Conventional Commits into `main`. Do not open a version-bump PR.
-2. The tag-release workflow runs `scripts/release_plan.sh`. If there are
-   releasable commits since the last `v*` tag, it pushes only an annotated
-   `vX.Y.Z` tag on that merge commit. With no `v*` tag the planner exits
+1. Merge Conventional Commits into `main`.
+2. The Release workflow runs `scripts/release_plan.sh`. If there are
+   releasable commits since the last `v*` tag, it updates `version.json`,
+   `src/config/DeviceConfig.h`, and `CHANGELOG.md` (via `git-cliff`),
+   commits `chore(release): vX.Y.Z [skip ci]`, tags `vX.Y.Z`, and pushes
+   the commit and tag to `main`. With no `v*` tag the planner exits
    nonzero unless you pass `--bootstrap` to start from `0.0.0`.
-3. Maintenance commits (`docs`, `test`, `build`, `ci`, `chore`) do not
-   create a release by themselves and do not compile on `main`. `feat` is a
-   minor bump, `fix` / `perf` / `refactor` / `revert` are patch bumps, and
-   a breaking change is a major bump.
-4. A tag pushed with `GITHUB_TOKEN` does not start other workflows, so
-   tag-release calls `firmware-release.yml` as a reusable workflow. That
-   job injects the tag version into `version.json` and
-   `INKADS_FIRMWARE_VERSION`, compiles every `targets.json` row, and
-   attaches `inkads-{filename}-{suffix}-v{version}.bin` assets,
-   `inkads-manifest.json`, and remaining `dist/*.bin` extras to the GitHub
-   Release. Human-pushed `v*` tags and Actions → Firmware release still
-   publish the same way.
+3. Loops are prevented by that `chore(release):` commit message (and
+   `[skip ci]`), not by skipping `github-actions[bot]`.
+4. Maintenance commits (`docs`, `test`, `build`, `ci`, `chore`) do not
+   create a release by themselves. `feat` is a minor bump, `fix` / `perf`
+   / `refactor` / `revert` are patch bumps, and a breaking change is a
+   major bump.
+5. The same run calls `firmware-release.yml` with the new tag and commit
+   SHA. That job compiles every `targets.json` row and attaches
+   `inkads-{filename}-{suffix}-v{version}.bin` assets,
+   `inkads-manifest.json`, and remaining `dist/*.bin` extras to the
+   GitHub Release. Republish an existing tag from Actions → Firmware
+   release.
 
-Committed `version.json` and `src/config/DeviceConfig.h` keep a `0.0.0`
-dev default for local and PR builds. Release binaries get the tag version
-at compile time (`scripts/compile.sh --version X.Y.Z` or
-`INKADS_FIRMWARE_VERSION`). `CHANGELOG.md` is historical; new notes live
-on GitHub Releases.
+`version.json` is the canonical firmware version and must match
+`INKADS_FIRMWARE_VERSION` in `DeviceConfig.h`. `scripts/compile.sh
+--version X.Y.Z` is an optional override that defaults to `version.json`.
+GitHub Releases also get generated notes.
+
+Required GitHub App configuration:
+
+- `vars.RELEASE_APP_ID`
+- `secrets.RELEASE_APP_PRIVATE_KEY`
 
 Add another `targets.json` row to compile a second board or a size-reduced
 feature cut of the same board.

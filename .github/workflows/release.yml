@@ -1,0 +1,128 @@
+# Compute the next semver from Conventional Commits on main, commit version
+# files plus CHANGELOG, tag vX.Y.Z, and publish firmware in the same run.
+# Push uses the singleton-release GitHub App (ruleset bypass), never GITHUB_TOKEN.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore(release):')) }}
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      next_tag: ${{ steps.plan.outputs.next_tag }}
+      sha: ${{ steps.stamp.outputs.sha }}
+    steps:
+      - name: Require singleton-release GitHub App credentials
+        env:
+          RELEASE_APP_ID: ${{ vars.RELEASE_APP_ID }}
+          RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${RELEASE_APP_ID}" ]]; then
+            echo "error: vars.RELEASE_APP_ID is not set." >&2
+            echo "Configure the singleton-release GitHub App id. Refusing to fall back to GITHUB_TOKEN." >&2
+            exit 1
+          fi
+          if [[ -z "${RELEASE_APP_PRIVATE_KEY}" ]]; then
+            echo "error: secrets.RELEASE_APP_PRIVATE_KEY is not set." >&2
+            echo "Configure the singleton-release GitHub App private key. Refusing to fall back to GITHUB_TOKEN." >&2
+            exit 1
+          fi
+
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: singleton-sd
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+
+      - name: Compute next release
+        id: plan
+        run: bash scripts/release_plan.sh
+
+      - name: Stop when no release is needed
+        if: steps.plan.outputs.release != 'true'
+        env:
+          BASE_TAG: ${{ steps.plan.outputs.base_tag }}
+        run: echo "No releasable conventional commits found since ${BASE_TAG}."
+
+      - name: Apply release version files
+        if: steps.plan.outputs.release == 'true'
+        run: bash scripts/release_plan.sh --apply-version
+
+      - name: Build changelog with git-cliff
+        if: steps.plan.outputs.release == 'true'
+        env:
+          NEXT_TAG: ${{ steps.plan.outputs.next_tag }}
+          RANGE: ${{ steps.plan.outputs.range }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/app" \
+            orhunp/git-cliff:2.13.1 \
+            --config cliff.toml \
+            --offline \
+            --tag "$NEXT_TAG" \
+            --prepend CHANGELOG.md \
+            "$RANGE"
+
+      - name: Validate version consistency
+        if: steps.plan.outputs.release == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.plan.outputs.next_tag }}
+        run: node scripts/check-firmware-version.mjs "$RELEASE_TAG"
+
+      - name: Commit, tag, and push to main
+        if: steps.plan.outputs.release == 'true'
+        id: stamp
+        env:
+          RELEASE_TOKEN: ${{ steps.app-token.outputs.token }}
+          NEXT_TAG: ${{ steps.plan.outputs.next_tag }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${RELEASE_TOKEN}" ]]; then
+            echo "error: singleton-release app token is empty. Refusing to fall back to GITHUB_TOKEN." >&2
+            exit 1
+          fi
+          git config user.name "singleton-release[bot]"
+          git config user.email "singleton-release[bot]@users.noreply.github.com"
+          if git rev-parse "$NEXT_TAG" >/dev/null 2>&1; then
+            echo "Tag $NEXT_TAG already exists" >&2
+            exit 1
+          fi
+          git add CHANGELOG.md version.json src/config/DeviceConfig.h
+          git commit -m "chore(release): ${NEXT_TAG} [skip ci]"
+          git tag -a "$NEXT_TAG" -m "InkAds firmware $NEXT_TAG"
+          git remote set-url origin "https://x-access-token:${RELEASE_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:main
+          git push origin "refs/tags/${NEXT_TAG}"
+          echo "sha=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+
+  publish:
+    needs: tag
+    if: needs.tag.outputs.release == 'true'
+    uses: ./.github/workflows/firmware-release.yml
+    with:
+      tag: ${{ needs.tag.outputs.next_tag }}
+      sha: ${{ needs.tag.outputs.sha }}
+    secrets:
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}

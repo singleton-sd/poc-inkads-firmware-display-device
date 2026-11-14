@@ -3,7 +3,7 @@
 #include <Arduino.h>
 
 #ifndef INKADS_FIRMWARE_VERSION
-#define INKADS_FIRMWARE_VERSION "0.0.0"
+#define INKADS_FIRMWARE_VERSION "1.2.0"
 #endif
 
 namespace DeviceConfig {

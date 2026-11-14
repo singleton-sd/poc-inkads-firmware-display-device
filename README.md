@@ -183,15 +183,16 @@ On boot, any leftover NVS `admin_pass` value from earlier firmware is deleted.
 
 ## Releases
 
-Releases are tag-only. Automation never commits or pushes to `main` (no
-ruleset bypass). Do not open version-bump PRs.
+Do not open version-bump PRs. On merge to `main`, the Release workflow
+commits `CHANGELOG.md`, `version.json`, and `DeviceConfig.h`, tags
+`vX.Y.Z`, and publishes firmware in the same run.
 
 - Conventional Commits drive semantic versioning (`feat` -> minor, `fix/perf/refactor/revert` -> patch, breaking change -> major).
-- When a version bump is due, the tag-release workflow pushes only a `vX.Y.Z` tag, then calls firmware-release to inject that version at build time, compile every `targets.json` row, and attach `inkads-{filename}-{suffix}-v{version}.bin`, `inkads-manifest.json`, and remaining `dist/*.bin` extras to the GitHub Release.
-- Committed `version.json` and `DeviceConfig::firmwareVersion` stay at `0.0.0` for local/PR builds. `scripts/compile.sh --version X.Y.Z` stamps the temp sketch and passes `-DINKADS_FIRMWARE_VERSION`.
-- `CHANGELOG.md` is historical. New notes live on [GitHub Releases](https://github.com/singleton-sd/poc-inkads-firmware-display-device/releases).
+- The push to `main` uses the **singleton-release** GitHub App (`vars.RELEASE_APP_ID` and `secrets.RELEASE_APP_PRIVATE_KEY`), which is on the default-branch ruleset bypass list. The job fails if those are missing and never falls back to `GITHUB_TOKEN`.
+- Release commits are `chore(release): vX.Y.Z [skip ci]`. That message (not `github.actor`) prevents a release loop.
+- The same run calls firmware-release with the tag and SHA, compiles every `targets.json` row, and attaches `inkads-{filename}-{suffix}-v{version}.bin`, `inkads-manifest.json`, and remaining `dist/*.bin` extras to the GitHub Release.
 - Unversioned pushes to `main` (`docs`, `ci`, `chore`, and similar) do not compile. Pull requests still compile in Firmware build.
-- To republish an existing tag, run Actions → Firmware release from `main` and pass the tag. The job overlays current release scripts onto that tag so tags from before build-time version injection still compile. Do not run the workflow from the old tag itself.
+- To republish an existing tag, run Actions → Firmware release from `main` and pass the tag.
 
 To keep release behavior predictable, use Conventional Commit titles for squash-merge commits, including a ticket reference as described in [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -200,9 +201,9 @@ To keep release behavior predictable, use Conventional Commit titles for squash-
 Open `display-device.ino`, select `MH ET LIVE ESP32MiniKit` (or `ESP32 Dev
 Module`), select an OTA-capable partition scheme, and upload. Local IDE
 builds use the committed defaults in `src/config/InkAdsFeatures.h` and
-report firmware version `0.0.0`. CI overwrites the features header per
-`targets.json` row and injects the release tag version before
-`arduino-cli compile`.
+`DeviceConfig.h`. CI overwrites the features header per `targets.json`
+row before `arduino-cli compile`. `scripts/compile.sh --version` can
+override the committed version; it defaults to `version.json`.
 
 New optional behaviour needs a catalog feature flag so each compile can
 include or drop it. Enable developed features on the `full` suffix; see

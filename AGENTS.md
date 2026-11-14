@@ -129,11 +129,12 @@ URL. Use the pull-request template. Do not force-push `main`. After a rebase,
 `git push --force-with-lease` only.
 
 Releases: Conventional Commits on `main` drive `scripts/release_plan.sh`.
-The tag-release workflow pushes only a `vX.Y.Z` tag (never commits to
-`main`) and fails closed when no `v*` tag exists unless `--bootstrap` is
-passed. Firmware release injects that version at build time. Committed
-`version.json` and `DeviceConfig.h` keep a `0.0.0` dev default. Do not
-open a version-bump PR. Do not add Node release tooling.
+The Release workflow commits `CHANGELOG.md`, `version.json`, and
+`DeviceConfig.h`, tags `vX.Y.Z`, and pushes with the singleton-release
+GitHub App (ruleset bypass). It fails closed when no `v*` tag exists
+unless `--bootstrap` is passed. Do not open a version-bump PR. Do not add
+Node release tooling. Never fall back to `GITHUB_TOKEN` for the release
+push.
 
 ## Security
 

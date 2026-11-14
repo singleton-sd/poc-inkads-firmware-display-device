@@ -86,4 +86,21 @@ OUTPUT="$(cd "$UNTAGGED" && bash "$PLAN" --bootstrap)"
 assert_eq "true" "$(output_value release)" "bootstrap feat releases"
 assert_eq "v0.1.0" "$(output_value next_tag)" "bootstrap feat is v0.1.0"
 
+APPLY="$TMP/apply"
+git init -b main "$APPLY" >/dev/null
+git -C "$APPLY" config user.email "test@example.com"
+git -C "$APPLY" config user.name "test"
+mkdir -p "$APPLY/src/config"
+printf '%s\n' '{"version":"1.2.0","channel":"stable"}' >"$APPLY/version.json"
+cp "$ROOT/src/config/DeviceConfig.h" "$APPLY/src/config/DeviceConfig.h"
+git -C "$APPLY" add version.json src
+git -C "$APPLY" commit -m "chore: init [SSD-1]" >/dev/null
+git -C "$APPLY" tag -a v1.2.0 -m "v1.2.0"
+git -C "$APPLY" commit --allow-empty -m "fix: stamp files [SSD-1]" >/dev/null
+OUTPUT="$(cd "$APPLY" && bash "$PLAN" --apply-version)"
+assert_eq "v1.2.1" "$(output_value next_tag)" "apply-version still plans"
+assert_eq "1.2.1" "$(jq -er '.version' "$APPLY/version.json")" "apply-version stamps version.json"
+grep -Fq '#define INKADS_FIRMWARE_VERSION "1.2.1"' "$APPLY/src/config/DeviceConfig.h" \
+  || { echo "apply-version did not stamp DeviceConfig.h" >&2; exit 1; }
+
 echo "ok release-plan.test.sh"

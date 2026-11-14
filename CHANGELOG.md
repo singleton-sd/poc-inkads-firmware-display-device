@@ -1,9 +1,5 @@
 # Changelog
 
-New release notes are published on
-[GitHub Releases](https://github.com/singleton-sd/poc-inkads-firmware-display-device/releases).
-This file is historical and is no longer updated by the release workflow.
-
 ## v1.2.0 - 2026-08-27
 [Full Changelog](https://github.com/singleton-sd/poc-inkads-firmware-display-device/compare/v1.1.0...v1.2.0)
 

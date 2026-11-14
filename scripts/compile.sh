@@ -40,9 +40,9 @@ Usage: compile.sh [--target <id>] [--all] [--version <major.minor.patch>]
 Compiles catalog targets from targets.json. Default is --all.
 
 --version stamps the temp sketch and passes -DINKADS_FIRMWARE_VERSION so
-artifact names and DeviceConfig::firmwareVersion match. Committed
-version.json and DeviceConfig.h are left unchanged. The environment
-variable INKADS_FIRMWARE_VERSION has the same effect.
+artifact names and DeviceConfig::firmwareVersion match. Without it, the
+committed version.json value is used. INKADS_FIRMWARE_VERSION has the
+same effect. Committed files are left unchanged.
 EOF
       exit 0
       ;;

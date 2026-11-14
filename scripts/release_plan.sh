@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
 # Choose the next vX.Y.Z tag from the latest tag plus Conventional Commits.
-# Does not modify version.json, DeviceConfig.h, or CHANGELOG.md.
 # Fails closed when no v* tag exists unless --bootstrap is passed.
+# --apply-version stamps version.json and DeviceConfig.h in the working tree.
 
 set -euo pipefail
 
 BOOTSTRAP=false
-if [[ "${1:-}" == "--bootstrap" ]]; then
-  BOOTSTRAP=true
-elif [[ -n "${1:-}" ]]; then
-  echo "usage: release_plan.sh [--bootstrap]" >&2
-  exit 1
-fi
+APPLY_VERSION=false
+for arg in "$@"; do
+  case "$arg" in
+    --bootstrap) BOOTSTRAP=true ;;
+    --apply-version) APPLY_VERSION=true ;;
+    *)
+      echo "usage: release_plan.sh [--bootstrap] [--apply-version]" >&2
+      exit 1
+      ;;
+  esac
+done
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 write_output() {
   local key="$1"
@@ -84,6 +91,10 @@ case "$bump" in
 esac
 
 next_tag="v${next_version}"
+
+if [[ "$APPLY_VERSION" == true ]]; then
+  bash "$SCRIPT_DIR/inject_firmware_version.sh" "$next_version" "$PWD"
+fi
 
 write_output release true
 write_output bump "$bump"
