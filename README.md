@@ -191,7 +191,7 @@ ruleset bypass). Do not open version-bump PRs.
 - Committed `version.json` and `DeviceConfig::firmwareVersion` stay at `0.0.0` for local/PR builds. `scripts/compile.sh --version X.Y.Z` stamps the temp sketch and passes `-DINKADS_FIRMWARE_VERSION`.
 - `CHANGELOG.md` is historical. New notes live on [GitHub Releases](https://github.com/singleton-sd/poc-inkads-firmware-display-device/releases).
 - Unversioned pushes to `main` (`docs`, `ci`, `chore`, and similar) do not compile. Pull requests still compile in Firmware build.
-- To republish an existing tag, run Actions → Firmware release → Run workflow.
+- To republish an existing tag, run Actions → Firmware release from `main` and pass the tag. The job overlays current release scripts onto that tag so tags from before build-time version injection still compile. Do not run the workflow from the old tag itself.
 
 To keep release behavior predictable, use Conventional Commit titles for squash-merge commits, including a ticket reference as described in [CONTRIBUTING.md](CONTRIBUTING.md).
 

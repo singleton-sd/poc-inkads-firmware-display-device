@@ -35,6 +35,20 @@ assert_eq "0.0.0" "$(jq -er '.version' "$ROOT/version.json")" "repo version.json
 grep -Fq '#define INKADS_FIRMWARE_VERSION "0.0.0"' "$ROOT/src/config/DeviceConfig.h" \
   || { echo "repo DeviceConfig.h was changed" >&2; exit 1; }
 
+OLD="$TMP/old"
+mkdir -p "$OLD/src/config"
+printf '%s\n' '{"version":"1.2.0","channel":"stable"}' >"$OLD/version.json"
+cat >"$OLD/src/config/DeviceConfig.h" <<'EOF'
+#pragma once
+namespace DeviceConfig {
+constexpr char firmwareVersion[] = "1.2.0";
+}
+EOF
+bash "$INJECT" 1.2.1 "$OLD"
+assert_eq "1.2.1" "$(jq -er '.version' "$OLD/version.json")" "legacy version.json"
+grep -Fq 'firmwareVersion[] = "1.2.1"' "$OLD/src/config/DeviceConfig.h" \
+  || { echo "legacy header was not stamped" >&2; exit 1; }
+
 (
   cd "$TMP"
   node "$ROOT/scripts/check-firmware-version.mjs" v9.9.9

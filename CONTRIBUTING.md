@@ -71,9 +71,9 @@ it does not bypass branch rulesets.
 
 1. Merge Conventional Commits into `main`. Do not open a version-bump PR.
 2. The tag-release workflow runs `scripts/release_plan.sh`. If there are
-   releasable commits since the last `v*` tag (or since `HEAD` when no tags
-   exist, using the committed `0.0.0` default as the base), it pushes only
-   an annotated `vX.Y.Z` tag on that merge commit.
+   releasable commits since the last `v*` tag, it pushes only an annotated
+   `vX.Y.Z` tag on that merge commit. With no `v*` tag the planner exits
+   nonzero unless you pass `--bootstrap` to start from `0.0.0`.
 3. Maintenance commits (`docs`, `test`, `build`, `ci`, `chore`) do not
    create a release by themselves and do not compile on `main`. `feat` is a
    minor bump, `fix` / `perf` / `refactor` / `revert` are patch bumps, and

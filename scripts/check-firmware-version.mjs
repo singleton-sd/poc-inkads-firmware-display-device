@@ -2,15 +2,17 @@ import fs from "node:fs";
 
 const metadata = JSON.parse(fs.readFileSync("version.json", "utf8"));
 const config = fs.readFileSync("src/config/DeviceConfig.h", "utf8");
-const match = config.match(/#define\s+INKADS_FIRMWARE_VERSION\s+"([^"]+)"/);
+const defineMatch = config.match(/#define\s+INKADS_FIRMWARE_VERSION\s+"([^"]+)"/);
+const assignMatch = config.match(/firmwareVersion\[\s*\]\s*=\s*"([^"]+)"/);
+const headerVersion = defineMatch?.[1] ?? assignMatch?.[1];
 
-if (!match) {
-  throw new Error("Could not find INKADS_FIRMWARE_VERSION");
+if (!headerVersion) {
+  throw new Error("Could not find INKADS_FIRMWARE_VERSION or firmwareVersion[]");
 }
 
-if (match[1] !== metadata.version) {
+if (headerVersion !== metadata.version) {
   throw new Error(
-    `Firmware version mismatch: DeviceConfig=${match[1]}, version.json=${metadata.version}`,
+    `Firmware version mismatch: DeviceConfig=${headerVersion}, version.json=${metadata.version}`,
   );
 }
 

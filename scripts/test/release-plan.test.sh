@@ -64,4 +64,26 @@ add_commit "feat(manifest)!: require schema version 2 [SSD-1]"
 OUTPUT="$(cd "$REPO" && bash "$PLAN")"
 assert_eq "v2.0.0" "$(output_value next_tag)" "breaking feat bumps major"
 
+UNTAGGED="$TMP/untagged"
+git init -b main "$UNTAGGED" >/dev/null
+git -C "$UNTAGGED" config user.email "test@example.com"
+git -C "$UNTAGGED" config user.name "test"
+printf '%s\n' '{"version":"0.0.0","channel":"stable"}' >"$UNTAGGED/version.json"
+git -C "$UNTAGGED" add version.json
+git -C "$UNTAGGED" commit -m "chore: init [SSD-1]" >/dev/null
+git -C "$UNTAGGED" commit --allow-empty -m "feat: first feature [SSD-1]" >/dev/null
+if cd "$UNTAGGED" && bash "$PLAN" >"$TMP/untagged.out" 2>"$TMP/untagged.err"; then
+  echo "expected missing tag to fail closed" >&2
+  exit 1
+fi
+grep -Fq 'no v* tag found' "$TMP/untagged.err" || {
+  echo "missing fail-closed error" >&2
+  cat "$TMP/untagged.err" >&2
+  exit 1
+}
+
+OUTPUT="$(cd "$UNTAGGED" && bash "$PLAN" --bootstrap)"
+assert_eq "true" "$(output_value release)" "bootstrap feat releases"
+assert_eq "v0.1.0" "$(output_value next_tag)" "bootstrap feat is v0.1.0"
+
 echo "ok release-plan.test.sh"

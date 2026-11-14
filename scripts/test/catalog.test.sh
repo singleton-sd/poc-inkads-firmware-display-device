@@ -61,6 +61,15 @@ resolved_new="$(
 assert_eq "inkads-mhetesp32minikit-full-v1.4.0" "$(printf '%s' "$resolved_new" | jq -er '.artifactStem')" "stem follows version.json"
 assert_eq "mhetesp32minikit-full" "$(printf '%s' "$resolved_new" | jq -er '.id')" "target id stable across versions"
 
+env_override="$(
+  INKADS_CATALOG="$FIXTURES/catalog-valid.json" \
+    INKADS_VERSION_FILE="$FIXTURES/version-0.2.0.json" \
+    INKADS_FIRMWARE_VERSION=9.9.9 \
+    bash "$CATALOG_BIN" resolve mhetesp32minikit-full
+)"
+assert_eq "9.9.9" "$(printf '%s' "$env_override" | jq -er '.version')" "INKADS_FIRMWARE_VERSION overrides version.json"
+assert_eq "inkads-mhetesp32minikit-full-v9.9.9" "$(printf '%s' "$env_override" | jq -er '.artifactStem')" "stem follows INKADS_FIRMWARE_VERSION"
+
 lite="$(
   INKADS_CATALOG="$FIXTURES/catalog-lite.json" \
     INKADS_VERSION_FILE="$FIXTURES/version-0.2.0.json" \

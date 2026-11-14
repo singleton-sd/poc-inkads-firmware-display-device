@@ -19,20 +19,38 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: firmware-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Checkout the workflow revision first so catalog tests see the
+      # committed 0.0.0 default, and so republish of an older tag still
+      # gets inject_firmware_version.sh from this file's commit.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Run catalog tests
+        run: bash scripts/test/run.sh
+
+      - name: Preserve release scripts from the workflow revision
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/inkads-release-scripts"
+          cp -a scripts/. "$RUNNER_TEMP/inkads-release-scripts/"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - uses: arduino/setup-arduino-cli@v2
+      - name: Overlay current release scripts
+        run: |
+          set -euo pipefail
+          cp -a "$RUNNER_TEMP/inkads-release-scripts/." scripts/
 
-      # Catalog tests assert the committed 0.0.0 default, so they must run
-      # before the tag version is injected into the workspace.
-      - name: Run catalog tests
-        run: bash scripts/test/run.sh
+      - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
 
       - name: Inject version from tag
         id: version

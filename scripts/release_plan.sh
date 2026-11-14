@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 # Choose the next vX.Y.Z tag from the latest tag plus Conventional Commits.
 # Does not modify version.json, DeviceConfig.h, or CHANGELOG.md.
+# Fails closed when no v* tag exists unless --bootstrap is passed.
 
 set -euo pipefail
+
+BOOTSTRAP=false
+if [[ "${1:-}" == "--bootstrap" ]]; then
+  BOOTSTRAP=true
+elif [[ -n "${1:-}" ]]; then
+  echo "usage: release_plan.sh [--bootstrap]" >&2
+  exit 1
+fi
 
 write_output() {
   local key="$1"
@@ -25,17 +34,17 @@ if [[ -n "$latest_tag" ]]; then
   minor="${BASH_REMATCH[2]}"
   patch="${BASH_REMATCH[3]}"
   range="${latest_tag}..HEAD"
-else
-  json_version="$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' version.json | head -n1)"
-  if [[ ! "$json_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-    echo "version.json is not semver-like: $json_version" >&2
-    exit 1
-  fi
-  major="${BASH_REMATCH[1]}"
-  minor="${BASH_REMATCH[2]}"
-  patch="${BASH_REMATCH[3]}"
-  latest_tag="v${json_version}"
+elif [[ "$BOOTSTRAP" == true ]]; then
+  echo "No v* tag found; --bootstrap starts from v0.0.0" >&2
+  major=0
+  minor=0
+  patch=0
+  latest_tag="v0.0.0"
   range="HEAD"
+else
+  echo "error: no v* tag found; refusing to plan a release from version.json" >&2
+  echo "Create an annotated vX.Y.Z tag, or pass --bootstrap to start from 0.0.0." >&2
+  exit 1
 fi
 
 subjects="$(git log --no-merges --format='%s' "$range" || true)"

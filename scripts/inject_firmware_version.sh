@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Stamp version.json and DeviceConfig.h with a release version.
 # Used in CI and in the temp sketch copy; committed files keep the 0.0.0 default.
+# Accepts the current INKADS_FIRMWARE_VERSION define and the pre-tag-only
+# firmwareVersion[] = "x.y.z" assignment so older tags can be republished.
 
 set -euo pipefail
 
@@ -26,13 +28,21 @@ jq --arg v "$version" '.version = $v' "$version_json" >"$tmp"
 mv "$tmp" "$version_json"
 
 tmp="$(mktemp)"
-if ! sed -E "s/#define INKADS_FIRMWARE_VERSION \"[^\"]*\"/#define INKADS_FIRMWARE_VERSION \"$version\"/" \
-  "$header" >"$tmp"; then
+if grep -Eq '#define[[:space:]]+INKADS_FIRMWARE_VERSION[[:space:]]+"' "$header"; then
+  sed -E "s/#define INKADS_FIRMWARE_VERSION \"[^\"]*\"/#define INKADS_FIRMWARE_VERSION \"$version\"/" \
+    "$header" >"$tmp"
+elif grep -Eq 'firmwareVersion\[[[:space:]]*\][[:space:]]*=[[:space:]]*"' "$header"; then
+  sed -E "s/firmwareVersion\[[[:space:]]*\][[:space:]]*=[[:space:]]*\"[^\"]*\"/firmwareVersion[] = \"$version\"/" \
+    "$header" >"$tmp"
+else
   rm -f "$tmp"
-  die "could not update INKADS_FIRMWARE_VERSION in DeviceConfig.h"
+  die "could not find INKADS_FIRMWARE_VERSION or firmwareVersion[] in DeviceConfig.h"
 fi
-if ! grep -Fq "#define INKADS_FIRMWARE_VERSION \"$version\"" "$tmp"; then
+
+if grep -Fq "#define INKADS_FIRMWARE_VERSION \"$version\"" "$tmp" ||
+  grep -Fq "firmwareVersion[] = \"$version\"" "$tmp"; then
+  mv "$tmp" "$header"
+else
   rm -f "$tmp"
-  die "could not update INKADS_FIRMWARE_VERSION in DeviceConfig.h"
+  die "could not update firmware version in DeviceConfig.h"
 fi
-mv "$tmp" "$header"
