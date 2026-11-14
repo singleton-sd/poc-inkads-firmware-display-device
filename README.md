@@ -192,7 +192,7 @@ commits `CHANGELOG.md`, `version.json`, and `DeviceConfig.h`, tags
 - Release commits are `chore(release): vX.Y.Z [skip ci]`. That message (not `github.actor`) prevents a release loop. GitHub also skips `pull_request` workflows when the skip token appears anywhere in a HEAD commit subject or body, so do not copy the release commit text into ordinary commit messages.
 - The same run calls firmware-release with the tag and SHA, compiles every `targets.json` row, and attaches `inkads-{filename}-{suffix}-v{version}.bin`, `inkads-manifest.json`, and remaining `dist/*.bin` extras to the GitHub Release.
 - Unversioned pushes to `main` (`docs`, `ci`, `chore`, and similar) do not compile. Pull requests still compile in Firmware build.
-- To republish an existing tag, run Actions → Firmware release from `main` and pass the tag.
+- To republish an existing tag, run Actions → Firmware release from `main` and pass the tag. That job overlays compile and publish scripts from the workflow revision onto the tag's source, so tags created before `compile.sh --version` still build.
 
 To keep release behavior predictable, use Conventional Commit titles for squash-merge commits, including a ticket reference as described in [CONTRIBUTING.md](CONTRIBUTING.md).
 

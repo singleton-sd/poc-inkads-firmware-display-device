@@ -55,16 +55,32 @@ jobs:
           app-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
           owner: singleton-sd
+          repositories: ${{ github.event.repository.name }}
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Run catalog tests
+        run: bash scripts/test/run.sh
+
+      - name: Preserve release scripts from the workflow revision
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/inkads-release-scripts"
+          cp -a scripts/. "$RUNNER_TEMP/inkads-release-scripts/"
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ inputs.sha || inputs.tag || github.ref }}
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
+      - name: Overlay current release scripts
+        run: |
+          set -euo pipefail
+          cp -a "$RUNNER_TEMP/inkads-release-scripts/." scripts/
 
-      - name: Run catalog tests
-        run: bash scripts/test/run.sh
+      - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
 
       - name: Resolve version from tag
         id: version

@@ -47,6 +47,7 @@ jobs:
           app-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
           owner: singleton-sd
+          repositories: ${{ github.event.repository.name }}
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -115,8 +116,7 @@ jobs:
           git commit -m "chore(release): ${NEXT_TAG} [skip ci]"
           git tag -a "$NEXT_TAG" -m "InkAds firmware $NEXT_TAG"
           git remote set-url origin "https://x-access-token:${RELEASE_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git push origin HEAD:main
-          git push origin "refs/tags/${NEXT_TAG}"
+          git push --atomic origin HEAD:main "refs/tags/${NEXT_TAG}"
           echo "sha=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
 
   publish:

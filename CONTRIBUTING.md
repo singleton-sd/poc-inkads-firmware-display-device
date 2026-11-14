@@ -94,7 +94,8 @@ the default-branch ruleset bypass list. It never falls back to
    `inkads-{filename}-{suffix}-v{version}.bin` assets,
    `inkads-manifest.json`, and remaining `dist/*.bin` extras to the
    GitHub Release. Republish an existing tag from Actions → Firmware
-   release.
+   release on `main`; the job overlays current `scripts/` onto the tag
+   so historical tags still compile.
 
 `version.json` is the canonical firmware version and must match
 `INKADS_FIRMWARE_VERSION` in `DeviceConfig.h`. `scripts/compile.sh
