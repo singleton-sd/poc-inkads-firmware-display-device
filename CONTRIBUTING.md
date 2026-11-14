@@ -79,7 +79,12 @@ the default-branch ruleset bypass list. It never falls back to
    the commit and tag to `main`. With no `v*` tag the planner exits
    nonzero unless you pass `--bootstrap` to start from `0.0.0`.
 3. Loops are prevented by that `chore(release):` commit message (and
-   `[skip ci]`), not by skipping `github-actions[bot]`.
+   `[skip ci]`), not by skipping `github-actions[bot]`. GitHub skips
+   `push` and `pull_request` workflows when that skip token appears
+   anywhere in the HEAD commit subject or body, not only on the
+   version-bump commit. Do not copy the release commit text into other
+   commit messages, or Firmware build and Conventional PR title will not
+   run on the pull request.
 4. Maintenance commits (`docs`, `test`, `build`, `ci`, `chore`) do not
    create a release by themselves. `feat` is a minor bump, `fix` / `perf`
    / `refactor` / `revert` are patch bumps, and a breaking change is a

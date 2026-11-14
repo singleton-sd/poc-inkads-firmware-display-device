@@ -110,6 +110,8 @@ jobs:
             exit 1
           fi
           git add CHANGELOG.md version.json src/config/DeviceConfig.h
+          # Skip token is only for this version-bump commit. GitHub matches
+          # it anywhere in a HEAD commit subject or body and would skip PR CI.
           git commit -m "chore(release): ${NEXT_TAG} [skip ci]"
           git tag -a "$NEXT_TAG" -m "InkAds firmware $NEXT_TAG"
           git remote set-url origin "https://x-access-token:${RELEASE_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
