@@ -2,6 +2,10 @@
 
 #include <Arduino.h>
 
+#ifndef INKADS_FIRMWARE_VERSION
+#define INKADS_FIRMWARE_VERSION "0.0.0"
+#endif
+
 namespace DeviceConfig {
 constexpr uint32_t serialBaud = 115200;
 constexpr uint32_t wifiConnectTimeoutMs = 15000;
@@ -19,5 +23,5 @@ constexpr char deviceDnsZone[] = "devices.singletonsd.com";
 constexpr char otaManifestUrl[] =
     "https://github.com/singleton-sd/poc-inkads-firmware-display-device/releases/latest/download/inkads-manifest.json";
 constexpr uint32_t otaHttpTimeoutMs = 30000;
-constexpr char firmwareVersion[] = "1.2.0";  // x-release-please-version
+constexpr char firmwareVersion[] = INKADS_FIRMWARE_VERSION;
 }  // namespace DeviceConfig

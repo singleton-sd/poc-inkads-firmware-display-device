@@ -128,9 +128,11 @@ Open with `gh pr create --base main`. Watch `gh pr checks --watch`. Return the
 URL. Use the pull-request template. Do not force-push `main`. After a rebase,
 `git push --force-with-lease` only.
 
-Releases: Conventional Commits on `main` drive `scripts/release_plan.sh` +
-`git-cliff`. Do not open a version-bump PR. Do not add Node release tooling.
-`version.json` is canonical and must match `DeviceConfig::firmwareVersion`.
+Releases: Conventional Commits on `main` drive `scripts/release_plan.sh`.
+The tag-release workflow pushes only a `vX.Y.Z` tag (never commits to
+`main`). Firmware release injects that version at build time. Committed
+`version.json` and `DeviceConfig.h` keep a `0.0.0` dev default. Do not
+open a version-bump PR. Do not add Node release tooling.
 
 ## Security
 

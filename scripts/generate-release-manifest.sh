@@ -30,8 +30,13 @@ sha256_file() {
   die 'sha256sum or shasum is required'
 }
 
-version="$(jq -er '.version' version.json)"
-channel="$(jq -er '.channel' version.json)"
+VERSION_FILE="${INKADS_VERSION_FILE:-$REPO_ROOT/version.json}"
+if [[ -n "${INKADS_FIRMWARE_VERSION:-}" ]]; then
+  version="$INKADS_FIRMWARE_VERSION"
+else
+  version="$(jq -er '.version' "$VERSION_FILE")"
+fi
+channel="$(jq -er '.channel' "$VERSION_FILE")"
 published="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 targets_json='{}'

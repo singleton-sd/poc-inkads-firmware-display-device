@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# Choose the next vX.Y.Z tag from the latest tag plus Conventional Commits.
+# Does not modify version.json, DeviceConfig.h, or CHANGELOG.md.
 
-APPLY_VERSION=false
-if [[ "${1:-}" == "--apply-version" ]]; then
-  APPLY_VERSION=true
-fi
+set -euo pipefail
 
 write_output() {
   local key="$1"
   local value="$2"
   printf '%s=%s\n' "$key" "$value"
   if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-    printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"
+    printf '%s=%s\n' "$key" "$value" >>"$GITHUB_OUTPUT"
   fi
 }
 
@@ -37,12 +35,7 @@ else
   minor="${BASH_REMATCH[2]}"
   patch="${BASH_REMATCH[3]}"
   latest_tag="v${json_version}"
-  base_commit="$(git log -1 --format='%H' -- version.json || true)"
-  if [[ -n "$base_commit" ]]; then
-    range="${base_commit}..HEAD"
-  else
-    range="HEAD"
-  fi
+  range="HEAD"
 fi
 
 subjects="$(git log --no-merges --format='%s' "$range" || true)"
@@ -82,34 +75,6 @@ case "$bump" in
 esac
 
 next_tag="v${next_version}"
-
-apply_version() {
-  local version="$1"
-  local tmp
-
-  tmp="$(mktemp)"
-  sed "s/\"version\": \"[^\"]*\"/\"version\": \"${version}\"/" version.json > "$tmp"
-  mv "$tmp" version.json
-
-  tmp="$(mktemp)"
-  if ! sed "s/firmwareVersion\\[\\] = \"[^\"]*\"/firmwareVersion[] = \"${version}\"/" \
-    src/config/DeviceConfig.h > "$tmp"; then
-    echo "Could not update firmwareVersion in DeviceConfig.h" >&2
-    rm -f "$tmp"
-    exit 1
-  fi
-  if grep -Fq "firmwareVersion[] = \"${version}\"" "$tmp"; then
-    mv "$tmp" src/config/DeviceConfig.h
-  else
-    echo "Could not update firmwareVersion in DeviceConfig.h" >&2
-    rm -f "$tmp"
-    exit 1
-  fi
-}
-
-if [[ "$APPLY_VERSION" == true ]]; then
-  apply_version "$next_version"
-fi
 
 write_output release true
 write_output bump "$bump"

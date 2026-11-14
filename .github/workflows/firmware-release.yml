@@ -9,6 +9,12 @@ on:
         description: Existing v-prefixed tag to release
         required: true
         type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: v-prefixed tag to build and publish
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -23,19 +29,35 @@ jobs:
 
       - uses: arduino/setup-arduino-cli@v2
 
+      # Catalog tests assert the committed 0.0.0 default, so they must run
+      # before the tag version is injected into the workspace.
       - name: Run catalog tests
         run: bash scripts/test/run.sh
 
-      - name: Resolve and validate version
+      - name: Inject version from tag
         id: version
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          node scripts/check-firmware-version.mjs "$RELEASE_TAG"
-          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          tag="${RELEASE_TAG#refs/tags/}"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag is not semver-like: $tag" >&2
+            exit 1
+          fi
+          version="${tag#v}"
+          bash scripts/inject_firmware_version.sh "$version"
+          echo "INKADS_FIRMWARE_VERSION=$version" >>"$GITHUB_ENV"
+          echo "RELEASE_TAG=$tag" >>"$GITHUB_ENV"
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+
+      - name: Validate injected version
+        run: node scripts/check-firmware-version.mjs "$RELEASE_TAG"
 
       - name: Compile release firmware
-        run: bash scripts/compile.sh --all
+        run: |
+          set -euo pipefail
+          bash scripts/compile.sh --all --version "${RELEASE_TAG#v}"
 
       - name: Stage release assets
         env:

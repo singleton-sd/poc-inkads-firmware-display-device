@@ -36,8 +36,8 @@ feat(manifest)!: require schema version 2 [POC-247]
 
 The pull-request title check enforces the shape, accepted types, and required
 ticket reference. After merge to `main`, `scripts/release_plan.sh` uses those
-commits to choose the next semantic version, and `git-cliff` writes changelog
-notes.
+commits to choose the next semantic version. Release notes are published on
+the GitHub Release for the tag, not by rewriting `CHANGELOG.md`.
 
 For local commits, the repo-managed hooks derive the ticket from a matching
 branch name such as `feature/POC-247-conventional-commit-hooks` and append it
@@ -66,26 +66,35 @@ After that:
 
 ## Release process
 
+Releases are **tag-only**. Automation never commits or pushes to `main`, and
+it does not bypass branch rulesets.
+
 1. Merge Conventional Commits into `main`. Do not open a version-bump PR.
-2. The main-merge release workflow runs `scripts/release_plan.sh`. If there
-   are releasable commits since the last tag (or since the last
-   `version.json` change when no tags exist), it updates `version.json` and
-   `DeviceConfig.h`, prepends `CHANGELOG.md` with `git-cliff`, compiles the
-   stamped firmware, and pushes a `vX.Y.Z` tag.
+2. The tag-release workflow runs `scripts/release_plan.sh`. If there are
+   releasable commits since the last `v*` tag (or since `HEAD` when no tags
+   exist, using the committed `0.0.0` default as the base), it pushes only
+   an annotated `vX.Y.Z` tag on that merge commit.
 3. Maintenance commits (`docs`, `test`, `build`, `ci`, `chore`) do not
    create a release by themselves and do not compile on `main`. `feat` is a
    minor bump, `fix` / `perf` / `refactor` / `revert` are patch bumps, and
    a breaking change is a major bump.
-4. After the tag is pushed, the same workflow compiles every `targets.json`
-   row and attaches `inkads-{filename}-{suffix}-v{version}.bin` assets,
+4. A tag pushed with `GITHUB_TOKEN` does not start other workflows, so
+   tag-release calls `firmware-release.yml` as a reusable workflow. That
+   job injects the tag version into `version.json` and
+   `INKADS_FIRMWARE_VERSION`, compiles every `targets.json` row, and
+   attaches `inkads-{filename}-{suffix}-v{version}.bin` assets,
    `inkads-manifest.json`, and remaining `dist/*.bin` extras to the GitHub
-   Release. Firmware release remains available to compile and publish an
-   existing tag from Actions.
+   Release. Human-pushed `v*` tags and Actions → Firmware release still
+   publish the same way.
 
-`version.json` is the canonical firmware version. The C++ constant is
-a generated release companion that is validated against it on every build.
-Artifact names also take that version. Add another `targets.json` row to
-compile a second board or a size-reduced feature cut of the same board.
+Committed `version.json` and `src/config/DeviceConfig.h` keep a `0.0.0`
+dev default for local and PR builds. Release binaries get the tag version
+at compile time (`scripts/compile.sh --version X.Y.Z` or
+`INKADS_FIRMWARE_VERSION`). `CHANGELOG.md` is historical; new notes live
+on GitHub Releases.
+
+Add another `targets.json` row to compile a second board or a size-reduced
+feature cut of the same board.
 
 ## Compile-time feature flags
 

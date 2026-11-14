@@ -2,10 +2,10 @@ import fs from "node:fs";
 
 const metadata = JSON.parse(fs.readFileSync("version.json", "utf8"));
 const config = fs.readFileSync("src/config/DeviceConfig.h", "utf8");
-const match = config.match(/firmwareVersion\[\]\s*=\s*"([^"]+)"/);
+const match = config.match(/#define\s+INKADS_FIRMWARE_VERSION\s+"([^"]+)"/);
 
 if (!match) {
-  throw new Error("Could not find DeviceConfig::firmwareVersion");
+  throw new Error("Could not find INKADS_FIRMWARE_VERSION");
 }
 
 if (match[1] !== metadata.version) {
