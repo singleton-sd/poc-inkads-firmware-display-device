@@ -70,19 +70,34 @@ git -C "$LOCAL" add note.txt
 git -C "$LOCAL" commit -m "chore: bump [SSD-1]" >/dev/null
 git -C "$LOCAL" tag -a v0.0.1 -m "v0.0.1"
 
-cat >"$REMOTE/hooks/pre-receive" <<'HOOK'
+# update (not pre-receive) rejects only tags, so a non-atomic push can
+# still advance main. That control would pass if --atomic were omitted.
+cat >"$REMOTE/hooks/update" <<'HOOK'
 #!/bin/sh
-while read -r _old _new ref; do
-  case "$ref" in
-    refs/tags/*)
-      echo "rejecting tag $ref" >&2
-      exit 1
-      ;;
-  esac
-done
+ref="$1"
+case "$ref" in
+  refs/tags/*)
+    echo "rejecting tag $ref" >&2
+    exit 1
+    ;;
+esac
 exit 0
 HOOK
-chmod +x "$REMOTE/hooks/pre-receive"
+chmod +x "$REMOTE/hooks/update"
+
+BUMP="$(git -C "$LOCAL" rev-parse HEAD)"
+if git -C "$LOCAL" push origin HEAD:main refs/tags/v0.0.1 >/dev/null 2>"$WORKDIR/nonatomic.err"; then
+  echo "non-atomic push should fail because the tag is rejected" >&2
+  exit 1
+fi
+assert_eq "$BUMP" "$(git -C "$REMOTE" rev-parse refs/heads/main)" \
+  'non-atomic control: main advances when only the tag is rejected'
+if git -C "$REMOTE" rev-parse refs/tags/v0.0.1 >/dev/null 2>&1; then
+  echo "non-atomic control: tag must still be rejected" >&2
+  exit 1
+fi
+
+git -C "$REMOTE" update-ref refs/heads/main "$MAIN"
 
 if git -C "$LOCAL" push --atomic origin HEAD:main refs/tags/v0.0.1 >/dev/null 2>"$WORKDIR/push.err"; then
   echo "atomic push should fail when the tag is rejected" >&2
@@ -90,7 +105,7 @@ if git -C "$LOCAL" push --atomic origin HEAD:main refs/tags/v0.0.1 >/dev/null 2>
 fi
 
 assert_eq "$MAIN" "$(git -C "$REMOTE" rev-parse refs/heads/main)" \
-  'main must not advance when the tag update is rejected'
+  'atomic push must not advance main when the tag update is rejected'
 if git -C "$REMOTE" rev-parse refs/tags/v0.0.1 >/dev/null 2>&1; then
   echo "tag v0.0.1 must not exist on the remote" >&2
   exit 1
