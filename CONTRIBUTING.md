@@ -107,6 +107,11 @@ Required GitHub App configuration:
 - `vars.RELEASE_APP_ID`
 - `secrets.RELEASE_APP_PRIVATE_KEY`
 
+The App token is minted with `permission-contents: write` only, scoped to
+this repository. Checkout uses `persist-credentials: false` so the token
+is not written to `.git/config` (git-cliff mounts `$PWD`). The push step
+sets the remote URL with the token after planning and changelog generation.
+
 Add another `targets.json` row to compile a second board or a size-reduced
 feature cut of the same board.
 

@@ -37,8 +37,21 @@ assert_contains "$release_yml" 'git push --atomic origin HEAD:main "refs/tags/${
   'release.yml pushes main and the tag atomically'
 assert_contains "$release_yml" 'repositories: ${{ github.event.repository.name }}' \
   'release.yml scopes the App token to this repository'
+assert_contains "$release_yml" 'permission-contents: write' \
+  'release.yml mints the App token with contents write only'
+assert_contains "$release_yml" 'persist-credentials: false' \
+  'release.yml checkout does not persist the App token'
+if [[ "$release_yml" == *'persist-credentials: true'* ]]; then
+  echo 'assert failed: release.yml must not persist checkout credentials' >&2
+  exit 1
+fi
+assert_contains "$release_yml" \
+  'orhunp/git-cliff:2.13.1@sha256:d49216b61658fc1b10bab6c5f82dfca03b8e37278618fdc3db235d95cf3c33f5' \
+  'release.yml pins git-cliff by digest'
 assert_contains "$firmware_yml" 'repositories: ${{ github.event.repository.name }}' \
   'firmware-release.yml scopes the App token to this repository'
+assert_contains "$firmware_yml" 'permission-contents: write' \
+  'firmware-release.yml mints the App token with contents write only'
 assert_contains "$firmware_yml" 'Overlay current release scripts' \
   'firmware-release.yml overlays scripts from the workflow revision'
 assert_contains "$firmware_yml" 'mkdir -p scripts' \
