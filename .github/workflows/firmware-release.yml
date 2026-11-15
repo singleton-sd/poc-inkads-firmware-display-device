@@ -1,41 +1,110 @@
 name: Firmware release
 
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
         description: Existing v-prefixed tag to release
         required: true
         type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: v-prefixed tag to build and publish
+        required: true
+        type: string
+      sha:
+        description: Commit SHA of the release (version-bump commit)
+        required: false
+        type: string
+    secrets:
+      RELEASE_APP_PRIVATE_KEY:
+        required: true
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: firmware-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
+      - name: Require singleton-release GitHub App credentials
+        env:
+          RELEASE_APP_ID: ${{ vars.RELEASE_APP_ID }}
+          RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${RELEASE_APP_ID}" ]]; then
+            echo "error: vars.RELEASE_APP_ID is not set." >&2
+            echo "Configure the singleton-release GitHub App id. Refusing to fall back to GITHUB_TOKEN." >&2
+            exit 1
+          fi
+          if [[ -z "${RELEASE_APP_PRIVATE_KEY}" ]]; then
+            echo "error: secrets.RELEASE_APP_PRIVATE_KEY is not set." >&2
+            echo "Configure the singleton-release GitHub App private key. Refusing to fall back to GITHUB_TOKEN." >&2
+            exit 1
+          fi
 
-      - uses: arduino/setup-arduino-cli@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Run catalog tests
         run: bash scripts/test/run.sh
 
-      - name: Resolve and validate version
+      - name: Preserve release scripts from the workflow revision
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/inkads-release-scripts"
+          cp -a scripts/. "$RUNNER_TEMP/inkads-release-scripts/"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.sha || inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - name: Overlay current release scripts
+        run: |
+          set -euo pipefail
+          mkdir -p scripts
+          cp -a "$RUNNER_TEMP/inkads-release-scripts/." scripts/
+
+      - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
+
+      - name: Resolve version from tag
         id: version
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          node scripts/check-firmware-version.mjs "$RELEASE_TAG"
-          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          tag="${RELEASE_TAG#refs/tags/}"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag is not semver-like: $tag" >&2
+            exit 1
+          fi
+          version="${tag#v}"
+          # Overlay copies this script from the workflow revision so historical
+          # tags still stamp version.json / DeviceConfig.h from the tag.
+          if [[ ! -f scripts/inject_firmware_version.sh ]]; then
+            echo "error: inject_firmware_version.sh missing after overlay" >&2
+            exit 1
+          fi
+          bash scripts/inject_firmware_version.sh "$version"
+          echo "INKADS_FIRMWARE_VERSION=$version" >>"$GITHUB_ENV"
+          echo "RELEASE_TAG=$tag" >>"$GITHUB_ENV"
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+
+      - name: Validate firmware version
+        run: node scripts/check-firmware-version.mjs "$RELEASE_TAG"
 
       - name: Compile release firmware
-        run: bash scripts/compile.sh --all
+        run: |
+          set -euo pipefail
+          bash scripts/compile.sh --all --version "${RELEASE_TAG#v}"
 
       - name: Stage release assets
         env:
@@ -43,8 +112,23 @@ jobs:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: bash scripts/stage-release-assets.sh
 
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: singleton-sd
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
       - name: Publish GitHub release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: bash scripts/publish-github-release.sh
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "error: singleton-release app token is empty. Refusing to fall back to GITHUB_TOKEN." >&2
+            exit 1
+          fi
+          bash scripts/publish-github-release.sh
