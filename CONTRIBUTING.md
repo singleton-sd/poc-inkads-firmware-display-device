@@ -108,9 +108,10 @@ Required GitHub App configuration:
 - `secrets.RELEASE_APP_PRIVATE_KEY`
 
 The App token is minted with `permission-contents: write` only, scoped to
-this repository. Checkout uses `persist-credentials: false` so the token
-is not written to `.git/config` (git-cliff mounts `$PWD`). The push step
-sets the remote URL with the token after planning and changelog generation.
+this repository, and only immediately before the push (or `gh release`).
+Checkout, `release_plan.sh`, git-cliff, tests, and compile run without it.
+Checkout uses `persist-credentials: false`. The push passes the token via
+`http.extraheader` so it is never written into the origin URL.
 
 Add another `targets.json` row to compile a second board or a size-reduced
 feature cut of the same board.

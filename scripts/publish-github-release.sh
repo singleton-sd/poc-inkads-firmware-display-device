@@ -33,7 +33,7 @@ if [[ "$DRY_RUN" == true ]]; then
 fi
 
 command -v gh >/dev/null || die 'gh is not on PATH'
-[[ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]] || die 'GH_TOKEN or GITHUB_TOKEN is required'
+[[ -n "${GH_TOKEN:-}" ]] || die 'GH_TOKEN is required'
 
 if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
   gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber

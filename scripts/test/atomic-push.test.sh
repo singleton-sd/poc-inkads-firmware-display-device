@@ -31,20 +31,81 @@ assert_contains() {
   fi
 }
 
+assert_order() {
+  local file="$1"
+  local first="$2"
+  local second="$3"
+  local label="$4"
+  local a b
+  a="$(grep -n -F "$first" "$file" | head -1 | cut -d: -f1)"
+  b="$(grep -n -F "$second" "$file" | head -1 | cut -d: -f1)"
+  if [[ -z "$a" || -z "$b" || "$a" -ge "$b" ]]; then
+    echo "assert_order failed: $label" >&2
+    echo "  first ($first): ${a:-missing}" >&2
+    echo "  second ($second): ${b:-missing}" >&2
+    exit 1
+  fi
+}
+
+assert_checkout_has_no_token() {
+  local file="$1"
+  local label="$2"
+  local block=""
+  local in_checkout=0
+  while IFS= read -r line; do
+    if [[ "$line" == *'uses: actions/checkout@'* ]]; then
+      in_checkout=1
+      block="$line"$'\n'
+      continue
+    fi
+    if [[ "$in_checkout" -eq 1 ]]; then
+      if [[ "$line" =~ ^[[:space:]]+-[[:space:]] ]]; then
+        in_checkout=0
+        if [[ "$block" == *'token:'* ]]; then
+          echo "assert failed: $label" >&2
+          exit 1
+        fi
+      else
+        block+="$line"$'\n'
+      fi
+    fi
+  done <"$file"
+  if [[ "$in_checkout" -eq 1 && "$block" == *'token:'* ]]; then
+    echo "assert failed: $label" >&2
+    exit 1
+  fi
+}
+
 release_yml="$(cat "$RELEASE")"
 firmware_yml="$(cat "$FIRMWARE")"
-assert_contains "$release_yml" 'git push --atomic origin HEAD:main "refs/tags/${NEXT_TAG}"' \
-  'release.yml pushes main and the tag atomically'
+assert_contains "$release_yml" \
+  'push --no-verify --atomic origin HEAD:main "refs/tags/${NEXT_TAG}"' \
+  'release.yml pushes main and the tag atomically without hooks'
+assert_contains "$release_yml" 'git commit --no-verify' \
+  'release.yml commits the version bump without hooks'
+assert_contains "$release_yml" \
+  'http.https://github.com/.extraheader=AUTHORIZATION: bearer ${RELEASE_TOKEN}' \
+  'release.yml passes the App token via http.extraheader, not the remote URL'
+if [[ "$release_yml" == *'x-access-token:'* ]]; then
+  echo 'assert failed: release.yml must not put the App token in the origin URL' >&2
+  exit 1
+fi
 assert_contains "$release_yml" 'repositories: ${{ github.event.repository.name }}' \
   'release.yml scopes the App token to this repository'
 assert_contains "$release_yml" 'permission-contents: write' \
   'release.yml mints the App token with contents write only'
 assert_contains "$release_yml" 'persist-credentials: false' \
-  'release.yml checkout does not persist the App token'
+  'release.yml checkout does not persist credentials'
 if [[ "$release_yml" == *'persist-credentials: true'* ]]; then
   echo 'assert failed: release.yml must not persist checkout credentials' >&2
   exit 1
 fi
+assert_checkout_has_no_token "$RELEASE" \
+  'release.yml checkout must not receive the App token'
+assert_order "$RELEASE" 'Validate version consistency' 'actions/create-github-app-token' \
+  'release.yml mints the App token after plan, git-cliff, and validate'
+assert_order "$RELEASE" 'actions/create-github-app-token' 'Commit, tag, and push to main' \
+  'release.yml mints the App token immediately before push'
 assert_contains "$release_yml" \
   'orhunp/git-cliff:2.13.1@sha256:d49216b61658fc1b10bab6c5f82dfca03b8e37278618fdc3db235d95cf3c33f5' \
   'release.yml pins git-cliff by digest'
@@ -52,6 +113,12 @@ assert_contains "$firmware_yml" 'repositories: ${{ github.event.repository.name 
   'firmware-release.yml scopes the App token to this repository'
 assert_contains "$firmware_yml" 'permission-contents: write' \
   'firmware-release.yml mints the App token with contents write only'
+assert_checkout_has_no_token "$FIRMWARE" \
+  'firmware-release.yml checkouts must not receive the App token'
+assert_order "$FIRMWARE" 'Compile release firmware' 'actions/create-github-app-token' \
+  'firmware-release.yml mints the App token after tests and compile'
+assert_order "$FIRMWARE" 'actions/create-github-app-token' 'Publish GitHub release' \
+  'firmware-release.yml mints the App token immediately before publish'
 assert_contains "$firmware_yml" 'Overlay current release scripts' \
   'firmware-release.yml overlays scripts from the workflow revision'
 assert_contains "$firmware_yml" 'mkdir -p scripts' \
@@ -61,6 +128,9 @@ assert_eq "2" "$persist_count" \
   'both firmware-release checkouts drop persisted credentials'
 assert_contains "$firmware_yml" 'inject_firmware_version.sh missing after overlay' \
   'firmware-release.yml fails closed if overlay did not restore inject'
+assert_contains "$(cat "$ROOT/scripts/publish-github-release.sh")" \
+  "die 'GH_TOKEN is required'" \
+  'publish-github-release.sh accepts GH_TOKEN only'
 
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
