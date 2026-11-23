@@ -84,9 +84,17 @@ assert_contains "$release_yml" \
 assert_contains "$release_yml" 'git commit --no-verify' \
   'release.yml commits the version bump without hooks'
 assert_contains "$release_yml" \
-  'http.https://github.com/.extraheader=AUTHORIZATION: bearer ${RELEASE_TOKEN}' \
-  'release.yml passes the App token via http.extraheader, not the remote URL'
-if [[ "$release_yml" == *'x-access-token:'* ]]; then
+  'http.https://github.com/.extraheader=AUTHORIZATION: basic ${BASIC}' \
+  'release.yml authenticates the git push with Basic extraheader'
+assert_contains "$release_yml" '::add-mask::${BASIC}' \
+  'release.yml masks the encoded Basic credential'
+assert_contains "$release_yml" 'x-access-token:${RELEASE_TOKEN}' \
+  'release.yml encodes x-access-token plus the App token as Basic'
+if [[ "$release_yml" == *'AUTHORIZATION: bearer'* ]]; then
+  echo 'assert failed: release.yml must not use Bearer for git HTTPS' >&2
+  exit 1
+fi
+if [[ "$release_yml" == *'https://x-access-token:'* ]]; then
   echo 'assert failed: release.yml must not put the App token in the origin URL' >&2
   exit 1
 fi

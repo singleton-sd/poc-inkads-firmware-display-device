@@ -116,7 +116,9 @@ jobs:
           # it anywhere in a HEAD commit subject or body and would skip PR CI.
           git commit --no-verify -m "chore(release): ${NEXT_TAG} [skip ci]"
           git tag -a "$NEXT_TAG" -m "InkAds firmware $NEXT_TAG"
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: bearer ${RELEASE_TOKEN}" \
+          BASIC="$(printf '%s' "x-access-token:${RELEASE_TOKEN}" | base64 -w0)"
+          echo "::add-mask::${BASIC}"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${BASIC}" \
             push --no-verify --atomic origin HEAD:main "refs/tags/${NEXT_TAG}"
           echo "sha=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
 

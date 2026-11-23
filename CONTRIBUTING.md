@@ -110,8 +110,9 @@ Required GitHub App configuration:
 The App token is minted with `permission-contents: write` only, scoped to
 this repository, and only immediately before the push (or `gh release`).
 Checkout, `release_plan.sh`, git-cliff, tests, and compile run without it.
-Checkout uses `persist-credentials: false`. The push passes the token via
-`http.extraheader` so it is never written into the origin URL.
+Checkout uses `persist-credentials: false`. The push passes
+`Basic base64(x-access-token:TOKEN)` via a command-local `http.extraheader`
+so the token is never written into the origin URL.
 
 Add another `targets.json` row to compile a second board or a size-reduced
 feature cut of the same board.
