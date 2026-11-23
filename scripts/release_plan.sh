@@ -1,17 +1,31 @@
 #!/usr/bin/env bash
+# Choose the next vX.Y.Z tag from the latest tag plus Conventional Commits.
+# Fails closed when no v* tag exists unless --bootstrap is passed.
+# --apply-version stamps version.json and DeviceConfig.h in the working tree.
+
 set -euo pipefail
 
+BOOTSTRAP=false
 APPLY_VERSION=false
-if [[ "${1:-}" == "--apply-version" ]]; then
-  APPLY_VERSION=true
-fi
+for arg in "$@"; do
+  case "$arg" in
+    --bootstrap) BOOTSTRAP=true ;;
+    --apply-version) APPLY_VERSION=true ;;
+    *)
+      echo "usage: release_plan.sh [--bootstrap] [--apply-version]" >&2
+      exit 1
+      ;;
+  esac
+done
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 write_output() {
   local key="$1"
   local value="$2"
   printf '%s=%s\n' "$key" "$value"
   if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-    printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"
+    printf '%s=%s\n' "$key" "$value" >>"$GITHUB_OUTPUT"
   fi
 }
 
@@ -27,22 +41,17 @@ if [[ -n "$latest_tag" ]]; then
   minor="${BASH_REMATCH[2]}"
   patch="${BASH_REMATCH[3]}"
   range="${latest_tag}..HEAD"
+elif [[ "$BOOTSTRAP" == true ]]; then
+  echo "No v* tag found; --bootstrap starts from v0.0.0" >&2
+  major=0
+  minor=0
+  patch=0
+  latest_tag="v0.0.0"
+  range="HEAD"
 else
-  json_version="$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' version.json | head -n1)"
-  if [[ ! "$json_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-    echo "version.json is not semver-like: $json_version" >&2
-    exit 1
-  fi
-  major="${BASH_REMATCH[1]}"
-  minor="${BASH_REMATCH[2]}"
-  patch="${BASH_REMATCH[3]}"
-  latest_tag="v${json_version}"
-  base_commit="$(git log -1 --format='%H' -- version.json || true)"
-  if [[ -n "$base_commit" ]]; then
-    range="${base_commit}..HEAD"
-  else
-    range="HEAD"
-  fi
+  echo "error: no v* tag found; refusing to plan a release from version.json" >&2
+  echo "Create an annotated vX.Y.Z tag, or pass --bootstrap to start from 0.0.0." >&2
+  exit 1
 fi
 
 subjects="$(git log --no-merges --format='%s' "$range" || true)"
@@ -83,32 +92,8 @@ esac
 
 next_tag="v${next_version}"
 
-apply_version() {
-  local version="$1"
-  local tmp
-
-  tmp="$(mktemp)"
-  sed "s/\"version\": \"[^\"]*\"/\"version\": \"${version}\"/" version.json > "$tmp"
-  mv "$tmp" version.json
-
-  tmp="$(mktemp)"
-  if ! sed "s/firmwareVersion\\[\\] = \"[^\"]*\"/firmwareVersion[] = \"${version}\"/" \
-    src/config/DeviceConfig.h > "$tmp"; then
-    echo "Could not update firmwareVersion in DeviceConfig.h" >&2
-    rm -f "$tmp"
-    exit 1
-  fi
-  if grep -Fq "firmwareVersion[] = \"${version}\"" "$tmp"; then
-    mv "$tmp" src/config/DeviceConfig.h
-  else
-    echo "Could not update firmwareVersion in DeviceConfig.h" >&2
-    rm -f "$tmp"
-    exit 1
-  fi
-}
-
 if [[ "$APPLY_VERSION" == true ]]; then
-  apply_version "$next_version"
+  bash "$SCRIPT_DIR/inject_firmware_version.sh" "$next_version" "$PWD"
 fi
 
 write_output release true

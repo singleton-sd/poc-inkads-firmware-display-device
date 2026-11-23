@@ -36,8 +36,8 @@ feat(manifest)!: require schema version 2 [POC-247]
 
 The pull-request title check enforces the shape, accepted types, and required
 ticket reference. After merge to `main`, `scripts/release_plan.sh` uses those
-commits to choose the next semantic version, and `git-cliff` writes changelog
-notes.
+commits to choose the next semantic version. Release notes are published on
+the GitHub Release for the tag, not by rewriting `CHANGELOG.md`.
 
 For local commits, the repo-managed hooks derive the ticket from a matching
 branch name such as `feature/POC-247-conventional-commit-hooks` and append it
@@ -66,26 +66,56 @@ After that:
 
 ## Release process
 
-1. Merge Conventional Commits into `main`. Do not open a version-bump PR.
-2. The main-merge release workflow runs `scripts/release_plan.sh`. If there
-   are releasable commits since the last tag (or since the last
-   `version.json` change when no tags exist), it updates `version.json` and
-   `DeviceConfig.h`, prepends `CHANGELOG.md` with `git-cliff`, compiles the
-   stamped firmware, and pushes a `vX.Y.Z` tag.
-3. Maintenance commits (`docs`, `test`, `build`, `ci`, `chore`) do not
-   create a release by themselves and do not compile on `main`. `feat` is a
-   minor bump, `fix` / `perf` / `refactor` / `revert` are patch bumps, and
-   a breaking change is a major bump.
-4. After the tag is pushed, the same workflow compiles every `targets.json`
-   row and attaches `inkads-{filename}-{suffix}-v{version}.bin` assets,
-   `inkads-manifest.json`, and remaining `dist/*.bin` extras to the GitHub
-   Release. Firmware release remains available to compile and publish an
-   existing tag from Actions.
+Do not open a version-bump PR. The Release workflow commits version files
+to `main` using the **singleton-release** GitHub App, which Pato adds to
+the default-branch ruleset bypass list. It never falls back to
+`GITHUB_TOKEN` for that push.
 
-`version.json` is the canonical firmware version. The C++ constant is
-a generated release companion that is validated against it on every build.
-Artifact names also take that version. Add another `targets.json` row to
-compile a second board or a size-reduced feature cut of the same board.
+1. Merge Conventional Commits into `main`.
+2. The Release workflow runs `scripts/release_plan.sh`. If there are
+   releasable commits since the last `v*` tag, it updates `version.json`,
+   `src/config/DeviceConfig.h`, and `CHANGELOG.md` (via `git-cliff`),
+   commits `chore(release): vX.Y.Z [skip ci]`, tags `vX.Y.Z`, and pushes
+   the commit and tag to `main`. With no `v*` tag the planner exits
+   nonzero unless you pass `--bootstrap` to start from `0.0.0`.
+3. Loops are prevented by that `chore(release):` commit message (and
+   `[skip ci]`), not by skipping `github-actions[bot]`. GitHub skips
+   `push` and `pull_request` workflows when that skip token appears
+   anywhere in the HEAD commit subject or body, not only on the
+   version-bump commit. Do not copy the release commit text into other
+   commit messages, or Firmware build and Conventional PR title will not
+   run on the pull request.
+4. Maintenance commits (`docs`, `test`, `build`, `ci`, `chore`) do not
+   create a release by themselves. `feat` is a minor bump, `fix` / `perf`
+   / `refactor` / `revert` are patch bumps, and a breaking change is a
+   major bump.
+5. The same run calls `firmware-release.yml` with the new tag and commit
+   SHA. That job compiles every `targets.json` row and attaches
+   `inkads-{filename}-{suffix}-v{version}.bin` assets,
+   `inkads-manifest.json`, and remaining `dist/*.bin` extras to the
+   GitHub Release. Republish an existing tag from Actions → Firmware
+   release on `main`; the job overlays current `scripts/` onto the tag
+   so historical tags still compile.
+
+`version.json` is the canonical firmware version and must match
+`INKADS_FIRMWARE_VERSION` in `DeviceConfig.h`. `scripts/compile.sh
+--version X.Y.Z` is an optional override that defaults to `version.json`.
+GitHub Releases also get generated notes.
+
+Required GitHub App configuration:
+
+- `vars.RELEASE_APP_ID`
+- `secrets.RELEASE_APP_PRIVATE_KEY`
+
+The App token is minted with `permission-contents: write` only, scoped to
+this repository, and only immediately before the push (or `gh release`).
+Checkout, `release_plan.sh`, git-cliff, tests, and compile run without it.
+Checkout uses `persist-credentials: false`. The push passes
+`Basic base64(x-access-token:TOKEN)` via a command-local `http.extraheader`
+so the token is never written into the origin URL.
+
+Add another `targets.json` row to compile a second board or a size-reduced
+feature cut of the same board.
 
 ## Compile-time feature flags
 

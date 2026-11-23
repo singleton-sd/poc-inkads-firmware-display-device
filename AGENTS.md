@@ -128,9 +128,13 @@ Open with `gh pr create --base main`. Watch `gh pr checks --watch`. Return the
 URL. Use the pull-request template. Do not force-push `main`. After a rebase,
 `git push --force-with-lease` only.
 
-Releases: Conventional Commits on `main` drive `scripts/release_plan.sh` +
-`git-cliff`. Do not open a version-bump PR. Do not add Node release tooling.
-`version.json` is canonical and must match `DeviceConfig::firmwareVersion`.
+Releases: Conventional Commits on `main` drive `scripts/release_plan.sh`.
+The Release workflow commits `CHANGELOG.md`, `version.json`, and
+`DeviceConfig.h`, tags `vX.Y.Z`, and pushes with the singleton-release
+GitHub App (ruleset bypass). It fails closed when no `v*` tag exists
+unless `--bootstrap` is passed. Do not open a version-bump PR. Do not add
+Node release tooling. Never fall back to `GITHUB_TOKEN` for the release
+push.
 
 ## Security
 

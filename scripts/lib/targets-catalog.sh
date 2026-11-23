@@ -24,10 +24,14 @@ json_type() {
 }
 
 load_version() {
-  [[ -f "$VERSION_PATH" ]] || die "missing version file: $VERSION_PATH"
   local version
-  version="$(jq -er '.version' "$VERSION_PATH")" || die "version.json must contain string .version"
-  [[ "$version" =~ $VERSION_RE ]] || die "version.json version must be major.minor.patch: $version"
+  if [[ -n "${INKADS_FIRMWARE_VERSION:-}" ]]; then
+    version="$INKADS_FIRMWARE_VERSION"
+  else
+    [[ -f "$VERSION_PATH" ]] || die "missing version file: $VERSION_PATH"
+    version="$(jq -er '.version' "$VERSION_PATH")" || die "version.json must contain string .version"
+  fi
+  [[ "$version" =~ $VERSION_RE ]] || die "firmware version must be major.minor.patch: $version"
   printf '%s' "$version"
 }
 

@@ -30,8 +30,16 @@ sha256_file() {
   die 'sha256sum or shasum is required'
 }
 
-version="$(jq -er '.version' version.json)"
-channel="$(jq -er '.channel' version.json)"
+VERSION_RE='^[0-9]+\.[0-9]+\.[0-9]+$'
+VERSION_FILE="${INKADS_VERSION_FILE:-$REPO_ROOT/version.json}"
+[[ -f "$VERSION_FILE" ]] || die "missing version file: $VERSION_FILE"
+if [[ -n "${INKADS_FIRMWARE_VERSION:-}" ]]; then
+  version="$INKADS_FIRMWARE_VERSION"
+else
+  version="$(jq -er '.version' "$VERSION_FILE")" || die "version.json must contain string .version"
+fi
+[[ "$version" =~ $VERSION_RE ]] || die "firmware version must be major.minor.patch: $version"
+channel="$(jq -er '.channel' "$VERSION_FILE")"
 published="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 targets_json='{}'
